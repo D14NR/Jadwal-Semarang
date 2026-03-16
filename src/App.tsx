@@ -191,6 +191,7 @@ export function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [toasts, setToasts] = useState<AppToast[]>([]);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
 
   const normalizeText = (value: string) => value.trim().toLowerCase();
   const titleCase = (value: string) =>
@@ -1291,7 +1292,10 @@ export function App() {
     setConflictError("");
   };
 
-  const handleLoadFromSheet = async (scheduleKey: ScheduleMenuKey = "bulanIni") => {
+  const handleLoadFromSheet = async (
+    scheduleKey: ScheduleMenuKey = "bulanIni",
+    options?: { preserveUiState?: boolean }
+  ) => {
     setSheetStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
       const targetSheet = scheduleSheetByKey[scheduleKey];
@@ -1307,8 +1311,10 @@ export function App() {
         ...prev,
         [scheduleKey]: parsedRecords,
       }));
-      clearEditing();
-      setQuery("");
+      if (!options?.preserveUiState) {
+        clearEditing();
+        setQuery("");
+      }
       setSheetStatus({
         loading: false,
         saving: false,
@@ -1946,6 +1952,33 @@ export function App() {
     }
   };
 
+  const refreshAllData = async (showToast = false) => {
+    if (!authSession || isRefreshingAll) {
+      return;
+    }
+    setIsRefreshingAll(true);
+    try {
+      await Promise.all([
+        handleLoadFromSheet("bulanIni", { preserveUiState: true }),
+        handleLoadFromSheet("jadwalTambahanPelayanan", { preserveUiState: true }),
+        handleLoadMapel(),
+        handleLoadPengajar(),
+        handleLoadSuratTugas(),
+        handleLoadPenempatanPengajar(),
+        handleLoadPermintaanPengajar(),
+      ]);
+      if (showToast) {
+        pushToast("Semua data berhasil direfresh.", "success");
+      }
+    } finally {
+      setIsRefreshingAll(false);
+    }
+  };
+
+  const handleRefreshAllData = async () => {
+    await refreshAllData(true);
+  };
+
   const handleOpenPermintaanModal = () => {
     const initialCabang = restrictedCabang || authSession?.cabang || "";
     setPermintaanDraft({
@@ -2259,13 +2292,19 @@ export function App() {
       bulanIni: restrictedCabang || "",
       jadwalTambahanPelayanan: restrictedCabang || "",
     });
-    handleLoadFromSheet("bulanIni");
-    handleLoadFromSheet("jadwalTambahanPelayanan");
-    handleLoadMapel();
-    handleLoadPengajar();
-    handleLoadSuratTugas();
-    handleLoadPenempatanPengajar();
-    handleLoadPermintaanPengajar();
+    void refreshAllData();
+  }, [authSession, restrictedCabang]);
+
+  useEffect(() => {
+    if (!authSession) {
+      return;
+    }
+    const refreshInterval = window.setInterval(() => {
+      void refreshAllData();
+    }, 5 * 60 * 1000);
+    return () => {
+      window.clearInterval(refreshInterval);
+    };
   }, [authSession, restrictedCabang]);
 
   useEffect(() => {
@@ -2931,9 +2970,27 @@ export function App() {
                     </div>
                     </div>
                   </div>
-                  <button type="button" className="btn btn-outline-danger btn-sm" onClick={handleLogout}>
-                    Logout
-                  </button>
+                  <div className="d-flex align-items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      title="Refresh semua data"
+                      aria-label="Refresh semua data"
+                      onClick={() => {
+                        void handleRefreshAllData();
+                      }}
+                      disabled={isRefreshingAll || isBusy}
+                    >
+                      {isRefreshingAll ? (
+                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      ) : (
+                        <i className="bi bi-arrow-clockwise" />
+                      )}
+                    </button>
+                    <button type="button" className="btn btn-outline-danger btn-sm" onClick={handleLogout}>
+                      Logout
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
