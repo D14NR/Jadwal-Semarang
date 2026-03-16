@@ -24,6 +24,7 @@ import { PermintaanPengajarView } from "./components/views/PermintaanPengajarVie
 import { SuratTugasView } from "./components/views/SuratTugasView";
 import { PrintJadwalView } from "./components/views/PrintJadwalView";
 import { LoadingOverlay } from "./components/feedback/LoadingOverlay";
+import { ConfirmDialog } from "./components/feedback/ConfirmDialog";
 import { ToastStack } from "./components/feedback/ToastStack";
 import { authStorageKey, loginAccounts } from "./config/auth";
 import type {
@@ -192,6 +193,21 @@ export function App() {
   const [loginError, setLoginError] = useState("");
   const [toasts, setToasts] = useState<AppToast[]>([]);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    loading: boolean;
+    onConfirm: null | (() => Promise<void> | void);
+  }>({
+    open: false,
+    title: "Konfirmasi",
+    message: "",
+    confirmLabel: "Ya, Lanjutkan",
+    loading: false,
+    onConfirm: null,
+  });
 
   const normalizeText = (value: string) => value.trim().toLowerCase();
   const titleCase = (value: string) =>
@@ -257,6 +273,43 @@ export function App() {
 
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
+  const openConfirmDialog = (
+    message: string,
+    onConfirm: () => Promise<void> | void,
+    options?: { title?: string; confirmLabel?: string }
+  ) => {
+    setConfirmDialog({
+      open: true,
+      title: options?.title || "Konfirmasi",
+      message,
+      confirmLabel: options?.confirmLabel || "Ya, Lanjutkan",
+      loading: false,
+      onConfirm,
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((prev) =>
+      prev.loading
+        ? prev
+        : { ...prev, open: false, message: "", onConfirm: null, confirmLabel: "Ya, Lanjutkan" }
+    );
+  };
+
+  const handleConfirmDialogAction = async () => {
+    if (!confirmDialog.onConfirm) {
+      closeConfirmDialog();
+      return;
+    }
+    setConfirmDialog((prev) => ({ ...prev, loading: true }));
+    try {
+      await confirmDialog.onConfirm();
+      setConfirmDialog((prev) => ({ ...prev, open: false, loading: false, onConfirm: null, message: "" }));
+    } catch (_error) {
+      setConfirmDialog((prev) => ({ ...prev, loading: false }));
+    }
   };
 
   const mapelOptions = useMemo(() => {
@@ -1328,7 +1381,7 @@ export function App() {
         saving: false,
         error: "Gagal memuat data dari Apps Script. Periksa hak akses atau format kolom.",
       }));
-      pushToast("Gagal memuat data jadwal dari spreadsheet.", "error");
+      pushToast("Gagal memuat data jadwal dari database.", "error");
     }
   };
 
@@ -1412,35 +1465,39 @@ export function App() {
     }
   };
 
-  const handleDeleteMapel = async (record: Record<string, string>) => {
-    if (!window.confirm(`Hapus mata pelajaran ${record.Mapel}?`)) return;
-    
-    setMapelStatus((prev) => ({ ...prev, loading: true, error: "" }));
-    try {
-      const payload = {
-        action: "deleteMapel",
-        sheetName: "Mata Pelajaran",
-        record: {
-          Mapel: record.Mapel
+  const handleDeleteMapel = (record: Record<string, string>) => {
+    openConfirmDialog(
+      `Hapus mata pelajaran ${record.Mapel}?`,
+      async () => {
+        setMapelStatus((prev) => ({ ...prev, loading: true, error: "" }));
+        try {
+          const payload = {
+            action: "deleteMapel",
+            sheetName: "Mata Pelajaran",
+            record: {
+              Mapel: record.Mapel
+            }
+          };
+
+          await fetch(appsScriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify(payload),
+          });
+
+          handleLoadMapel();
+          pushToast("Data mata pelajaran berhasil dihapus.", "success");
+        } catch (error) {
+          setMapelStatus((prev) => ({
+            ...prev,
+            loading: false,
+            error: "Gagal menghapus mata pelajaran."
+          }));
+          pushToast("Gagal menghapus mata pelajaran.", "error");
         }
-      };
-
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify(payload),
-      });
-
-      handleLoadMapel();
-      pushToast("Data mata pelajaran berhasil dihapus.", "success");
-    } catch (error) {
-      setMapelStatus((prev) => ({
-        ...prev,
-        loading: false,
-        error: "Gagal menghapus mata pelajaran."
-      }));
-      pushToast("Gagal menghapus mata pelajaran.", "error");
-    }
+      },
+      { title: "Hapus Mata Pelajaran", confirmLabel: "Hapus" }
+    );
   };
 
   const handleLoadPengajar = async () => {
@@ -1669,35 +1726,39 @@ export function App() {
     }
   };
 
-  const handleDeletePengajar = async (record: Record<string, string>) => {
-    if (!window.confirm(`Hapus pengajar ${record["Nama"]}?`)) return;
-    
-    setPengajarStatus((prev) => ({ ...prev, loading: true }));
-    try {
-      const payload = {
-        action: "deletePengajar",
-        sheetName: "Data Pengajar",
-        spreadsheetId: mainSpreadsheetId,
-        record: record,
-      };
+  const handleDeletePengajar = (record: Record<string, string>) => {
+    openConfirmDialog(
+      `Hapus pengajar ${record["Nama"]}?`,
+      async () => {
+        setPengajarStatus((prev) => ({ ...prev, loading: true }));
+        try {
+          const payload = {
+            action: "deletePengajar",
+            sheetName: "Data Pengajar",
+            spreadsheetId: mainSpreadsheetId,
+            record: record,
+          };
 
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+          await fetch(appsScriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-      handleLoadPengajar();
-      pushToast("Data pengajar berhasil dihapus.", "success");
-    } catch (error) {
-      setPengajarStatus((prev) => ({
-        ...prev,
-        loading: false,
-        error: "Gagal menghapus pengajar.",
-      }));
-      pushToast("Gagal menghapus data pengajar.", "error");
-    }
+          handleLoadPengajar();
+          pushToast("Data pengajar berhasil dihapus.", "success");
+        } catch (error) {
+          setPengajarStatus((prev) => ({
+            ...prev,
+            loading: false,
+            error: "Gagal menghapus pengajar.",
+          }));
+          pushToast("Gagal menghapus data pengajar.", "error");
+        }
+      },
+      { title: "Hapus Pengajar", confirmLabel: "Hapus" }
+    );
   };
 
   const normalizePenempatanRecord = (record: Record<string, string>) => {
@@ -1865,36 +1926,35 @@ export function App() {
     }
   };
 
-  const handleDeletePenempatanPengajar = async (record: Record<string, string>) => {
-    const confirmed = window.confirm(
-      `Hapus penempatan untuk ${record["Nama Pengajar"] || record["Kode Pengajar"]}?`
+  const handleDeletePenempatanPengajar = (record: Record<string, string>) => {
+    openConfirmDialog(
+      `Hapus penempatan untuk ${record["Nama Pengajar"] || record["Kode Pengajar"]}?`,
+      async () => {
+        setPenempatanStatus((prev) => ({ ...prev, loading: true, error: "" }));
+        try {
+          await fetch(appsScriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify({
+              action: "deletePenempatanPengajar",
+              sheetName: "Penempatan Pengajar",
+              spreadsheetId: mainSpreadsheetId,
+              record,
+            }),
+          });
+          await handleLoadPenempatanPengajar();
+          pushToast("Penempatan pengajar berhasil dihapus.", "success");
+        } catch (error) {
+          setPenempatanStatus((prev) => ({
+            ...prev,
+            loading: false,
+            error: "Gagal menghapus penempatan pengajar.",
+          }));
+          pushToast("Gagal menghapus penempatan pengajar.", "error");
+        }
+      },
+      { title: "Hapus Penempatan", confirmLabel: "Hapus" }
     );
-    if (!confirmed) {
-      return;
-    }
-
-    setPenempatanStatus((prev) => ({ ...prev, loading: true, error: "" }));
-    try {
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify({
-          action: "deletePenempatanPengajar",
-          sheetName: "Penempatan Pengajar",
-          spreadsheetId: mainSpreadsheetId,
-          record,
-        }),
-      });
-      await handleLoadPenempatanPengajar();
-      pushToast("Penempatan pengajar berhasil dihapus.", "success");
-    } catch (error) {
-      setPenempatanStatus((prev) => ({
-        ...prev,
-        loading: false,
-        error: "Gagal menghapus penempatan pengajar.",
-      }));
-      pushToast("Gagal menghapus penempatan pengajar.", "error");
-    }
   };
 
   const normalizePermintaanRecord = (record: Record<string, string>) => {
@@ -2153,7 +2213,7 @@ export function App() {
     }
   };
 
-  const handleDeletePermintaanPengajar = async (record: Record<string, string>) => {
+  const handleDeletePermintaanPengajar = (record: Record<string, string>) => {
     const cabangDomisiliKey = normalizeText(record["Cabang Domisili"] || "");
     const userCabangKey = normalizeText(restrictedCabang || authSession?.cabang || "");
     const canDelete = isAdmin || cabangDomisiliKey === userCabangKey;
@@ -2163,36 +2223,39 @@ export function App() {
       return;
     }
 
-    if (!window.confirm("Hapus permintaan pengajar ini?")) {
-      return;
-    }
-    setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
-    try {
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify({
-          action: "deletePermintaanPengajar",
-          sheetName: "Permintaan Pengajar Antar Cabang",
-          spreadsheetId: mainSpreadsheetId,
-          record,
-        }),
-      });
-      await Promise.all([
-        handleLoadPermintaanPengajar(),
-        handleLoadFromSheet("bulanIni"),
-        handleLoadFromSheet("jadwalTambahanPelayanan"),
-        handleLoadSuratTugas(),
-      ]);
-      pushToast("Permintaan pengajar berhasil dihapus.", "success");
-    } catch (error) {
-      setPermintaanStatus((prev) => ({
-        ...prev,
-        loading: false,
-        error: "Gagal menghapus permintaan pengajar.",
-      }));
-      pushToast("Gagal menghapus permintaan pengajar.", "error");
-    }
+    openConfirmDialog(
+      "Hapus permintaan pengajar ini?",
+      async () => {
+        setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
+        try {
+          await fetch(appsScriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            body: JSON.stringify({
+              action: "deletePermintaanPengajar",
+              sheetName: "Permintaan Pengajar Antar Cabang",
+              spreadsheetId: mainSpreadsheetId,
+              record,
+            }),
+          });
+          await Promise.all([
+            handleLoadPermintaanPengajar(),
+            handleLoadFromSheet("bulanIni"),
+            handleLoadFromSheet("jadwalTambahanPelayanan"),
+            handleLoadSuratTugas(),
+          ]);
+          pushToast("Permintaan pengajar berhasil dihapus.", "success");
+        } catch (error) {
+          setPermintaanStatus((prev) => ({
+            ...prev,
+            loading: false,
+            error: "Gagal menghapus permintaan pengajar.",
+          }));
+          pushToast("Gagal menghapus permintaan pengajar.", "error");
+        }
+      },
+      { title: "Hapus Permintaan", confirmLabel: "Hapus" }
+    );
   };
 
   const handleUpdatePermintaanStatus = async (
@@ -2541,7 +2604,7 @@ export function App() {
     await persistRecordToSheet(sheetRecord);
   };
 
-  const handleDeleteClass = async (group: {
+  const handleDeleteClass = (group: {
     cabang: string;
     kelas: string;
     sekolah: string;
@@ -2551,36 +2614,36 @@ export function App() {
       pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menghapus kelas.", "error");
       return;
     }
-    const confirmation = window.confirm(
-      `Hapus seluruh jadwal untuk ${group.kelas} (${group.cabang})? Tindakan ini akan menghapus semua data terkait di Surat Tugas Pengajar.`
+    openConfirmDialog(
+      `Hapus seluruh jadwal untuk ${group.kelas} (${group.cabang})? Tindakan ini akan menghapus semua data terkait di Surat Tugas Pengajar.`,
+      async () => {
+        setRecords((prev) => ({
+          ...prev,
+          [activeScheduleKey]: (prev[activeScheduleKey] ?? []).filter(
+            (item) =>
+              item.cabang !== group.cabang ||
+              item.kelas !== group.kelas ||
+              (item.sekolah || "") !== (group.sekolah || "")
+          ),
+        }));
+        if (
+          editingSlot &&
+          editingSlot.cabang === group.cabang &&
+          editingSlot.kelas === group.kelas &&
+          (editingSlot.sekolah || "") === (group.sekolah || "")
+        ) {
+          clearEditing();
+        }
+        await postToSheet({
+          action: "deleteClass",
+          cabang: group.cabang,
+          kelas: group.kelas,
+          sekolah: group.sekolah || "",
+        });
+        pushToast("Kelas dan seluruh jadwalnya berhasil dihapus.", "success");
+      },
+      { title: "Hapus Kelas", confirmLabel: "Hapus" }
     );
-    if (!confirmation) {
-      return;
-    }
-    setRecords((prev) => ({
-      ...prev,
-      [activeScheduleKey]: (prev[activeScheduleKey] ?? []).filter(
-        (item) =>
-          item.cabang !== group.cabang ||
-          item.kelas !== group.kelas ||
-          (item.sekolah || "") !== (group.sekolah || "")
-      ),
-    }));
-    if (
-      editingSlot &&
-      editingSlot.cabang === group.cabang &&
-      editingSlot.kelas === group.kelas &&
-      (editingSlot.sekolah || "") === (group.sekolah || "")
-    ) {
-      clearEditing();
-    }
-    await postToSheet({
-      action: "deleteClass",
-      cabang: group.cabang,
-      kelas: group.kelas,
-      sekolah: group.sekolah || "",
-    });
-    pushToast("Kelas dan seluruh jadwalnya berhasil dihapus.", "success");
   };
 
   const buildSheetRecord = (
@@ -2663,9 +2726,9 @@ export function App() {
           ...prev,
           saving: false,
           error:
-            "Gagal menyimpan ke Google Sheet. Pastikan Apps Script sudah dipublikasikan dan akses publik diizinkan.",
+            "Gagal menyimpan ke database. Pastikan Apps Script sudah dipublikasikan dan akses publik diizinkan.",
         }));
-        pushToast("Gagal menyimpan ke Google Sheet.", "error");
+        pushToast("Gagal menyimpan ke database.", "error");
         return false;
       }
     }
@@ -2897,7 +2960,7 @@ export function App() {
     permintaanStatus.loading;
 
   const busyMessage = sheetStatus.saving
-    ? "Menyimpan perubahan ke Google Sheet..."
+    ? "Menyimpan perubahan ke database..."
     : "Memuat data terbaru...";
 
   if (!authSession) {
@@ -3252,6 +3315,18 @@ export function App() {
         onAddTanggalKhusus={handleAddPermintaanTanggalKhusus}
         onRemoveTanggalKhusus={handleRemovePermintaanTanggalKhusus}
         onSave={handleSavePermintaanPengajar}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        loading={confirmDialog.loading}
+        onCancel={closeConfirmDialog}
+        onConfirm={() => {
+          void handleConfirmDialogAction();
+        }}
       />
 
       <LoadingOverlay show={isBusy} message={busyMessage} />

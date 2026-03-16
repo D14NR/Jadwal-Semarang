@@ -567,38 +567,93 @@ body {
   table-layout: fixed;
 }
 
+.print-controls-panel {
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  padding: 0.6rem;
+}
+
+.print-title-stack {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.print-preview-shell {
+  border-color: #dbe2ea !important;
+  border-radius: 12px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  background: #fff;
+}
+
 .print-preview-table th,
 .print-preview-table td {
   padding: 0.2rem 0.25rem;
   vertical-align: top;
 }
 
+.print-preview-table th {
+  background: #f1f5f9;
+  font-weight: 700;
+}
+
 .print-preview-table .print-kelas-col {
-  width: 96px;
-  min-width: 96px;
+  width: 72px;
+  min-width: 72px;
   text-align: center;
   vertical-align: middle;
 }
 
 .print-preview-table .print-date-col {
-  width: 74px;
-  min-width: 74px;
+  width: 68px;
+  min-width: 68px;
 }
 
 .print-preview-table .print-mapel-col {
-  width: 90px;
-  min-width: 90px;
-  max-width: 90px;
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
   white-space: normal;
   word-break: break-word;
 }
 
 .print-preview-table .print-time-col {
-  width: 68px;
-  min-width: 68px;
+  width: 60px;
+  min-width: 60px;
+}
+
+.print-preview-portrait .print-preview-table .print-kelas-col {
+  width: 64px;
+  min-width: 64px;
+}
+
+.print-preview-portrait .print-preview-table .print-date-col {
+  width: 56px;
+  min-width: 56px;
+}
+
+.print-preview-portrait .print-preview-table .print-mapel-col {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+}
+
+.print-preview-portrait .print-preview-table .print-time-col {
+  width: 54px;
+  min-width: 54px;
 }
 
 .print-preview-table .class-group-start td {
   border-top-width: 2px;
+}
+
+.print-preview-table .session-item + .session-item {
+  margin-top: 0.15rem;
+}
+
+.print-preview-table tbody tr:hover td {
+  background-color: #f8fbff;
 }
 

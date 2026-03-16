@@ -150,7 +150,7 @@ export function TopToolbar({
       </div>
 
       {(activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan") && sheetStatus.saving && (
-        <span className="text-primary small fw-semibold">Menyimpan ke Google Sheet...</span>
+        <span className="text-primary small fw-semibold">Menyimpan ke Database...</span>
       )}
     </div>
   );

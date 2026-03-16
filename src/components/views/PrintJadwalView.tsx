@@ -20,6 +20,7 @@ type RegularDayColumn = {
 };
 
 type ScheduleType = "reguler" | "tambahan";
+type PrintOrientation = "landscape" | "portrait";
 
 const hasScheduleContent = (entry: RecordItem) =>
   Boolean((entry.mapel || "").trim() || (entry.pengajar || "").trim() || (entry.waktu || "").trim());
@@ -91,14 +92,17 @@ const escapeHtml = (value: string) =>
 
 const getCellHtml = (entries: RecordItem[], mapelNameByKode: Record<string, string>) => {
   if (entries.length === 0) {
-    return "-";
+    return '<span class="cell-empty">-</span>';
   }
   return entries
     .map(
       (entry, index) =>
-        `<div><strong>${getDisplayMapel(entry.mapel || `Sesi ${index + 1}`, mapelNameByKode)}</strong><br/>${entry.pengajar || "-"}<br/>${
+        `<div class="session-item"><div class="session-mapel">${getDisplayMapel(
+          entry.mapel || `Sesi ${index + 1}`,
+          mapelNameByKode
+        )}</div><div class="session-pengajar">${entry.pengajar || "-"}</div><div class="session-waktu">${
           entry.waktu || "-"
-        }</div>`
+        }</div></div>`
     )
     .join("<hr/>");
 };
@@ -190,7 +194,11 @@ const getTambahanTableHtml = (
     .join("");
 
   return `
-    <table>
+    <table class="tambahan-print-table">
+      <colgroup>
+        <col class="kelas-col" />
+        ${dates.map(() => '<col class="tambahan-day-col" />').join("")}
+      </colgroup>
       <thead>
         <tr><th>Kelas</th>${dateHeader}</tr>
       </thead>
@@ -199,18 +207,32 @@ const getTambahanTableHtml = (
   `;
 };
 
-const printHtmlDocument = (title: string, content: string, copies = 5) => {
+const printHtmlDocument = (
+  title: string,
+  content: string,
+  copies = 5,
+  orientation: PrintOrientation = "landscape"
+) => {
   // Avoid noopener/noreferrer here because some browsers keep the new tab at about:blank
   // and block document.write access for the opener context.
   const printWindow = window.open("about:blank", "_blank", "width=1440,height=900");
   if (!printWindow) {
-    window.alert("Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.");
-    return;
+    return {
+      success: false,
+      message: "Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.",
+    };
   }
   const duplicatedContent = Array.from({ length: copies }, (_, index) => {
     const separatorClass = index < copies - 1 ? "copy-block with-separator" : "copy-block";
     return `<section class="${separatorClass}">${content}</section>`;
   }).join("");
+
+  const isPortrait = orientation === "portrait";
+  const kelasWidth = isPortrait ? 44 : 52;
+  const dateWidth = isPortrait ? 46 : 52;
+  const mapelWidth = isPortrait ? 56 : 70;
+  const timeWidth = isPortrait ? 40 : 46;
+  const tambahanDayWidth = isPortrait ? 64 : 80;
 
   const html = `
     <!doctype html>
@@ -219,26 +241,35 @@ const printHtmlDocument = (title: string, content: string, copies = 5) => {
         <meta charset="utf-8" />
         <title>${title}</title>
         <style>
-          @page { size: A4 landscape; margin: 6mm; }
-          body { font-family: Arial, sans-serif; margin: 0; font-size: 8px; }
+          @page { size: A4 ${orientation}; margin: 6mm; }
+          body { font-family: Inter, Arial, sans-serif; margin: 0; font-size: 8px; color: #0f172a; }
           .print-sheet { display: flex; flex-direction: column; gap: 4px; height: 100%; }
-          .copy-block { flex: 1 1 0; overflow: hidden; padding-bottom: 2px; }
+          .copy-block { flex: 1 1 0; overflow: hidden; padding: 3px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; }
           .copy-block.with-separator { border-bottom: 1px dashed #adb5bd; }
           .print-title-block { margin: 0 0 4px; text-align: left; }
-          .print-title-line { font-size: 9px; font-weight: 700; line-height: 1.15; }
+          .print-title-line { font-size: 9px; font-weight: 700; line-height: 1.15; letter-spacing: 0.02em; }
           .muted { color: #6c757d; }
           table { border-collapse: collapse; width: 100%; margin-top: 3px; }
-          th, td { border: 1px solid #212529; padding: 2px; vertical-align: top; }
-          th { background: #f1f3f5; font-size: 7px; }
-          td { font-size: 7px; line-height: 1.1; }
+          th, td { border: 1px solid #94a3b8; padding: 2px 3px; vertical-align: top; }
+          th { background: #e2e8f0; font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+          td { font-size: 7px; line-height: 1.2; }
           .regular-print-table { table-layout: fixed; }
           .regular-print-table th { text-align: center; }
-          .regular-print-table .kelas-cell { font-weight: 700; min-width: 62px; width: 62px; text-align: center; vertical-align: middle; }
-          .regular-print-table .date-col { width: 52px; white-space: nowrap; }
-          .regular-print-table .mapel-col { width: 80px; max-width: 80px; word-break: break-word; }
-          .regular-print-table .time-col { width: 46px; white-space: nowrap; }
+          .regular-print-table .kelas-col { width: ${kelasWidth}px; }
+          .regular-print-table .kelas-cell { font-weight: 700; width: ${kelasWidth}px; max-width: ${kelasWidth}px; text-align: center; vertical-align: middle; }
+          .regular-print-table .date-col { width: ${dateWidth}px; white-space: nowrap; }
+          .regular-print-table .mapel-col { width: ${mapelWidth}px; max-width: ${mapelWidth}px; word-break: break-word; }
+          .regular-print-table .time-col { width: ${timeWidth}px; white-space: nowrap; }
           .regular-print-table .class-group-start td { border-top-width: 2px; }
-          hr { border: 0; border-top: 1px dashed #adb5bd; margin: 2px 0; }
+          .tambahan-print-table { table-layout: fixed; }
+          .tambahan-print-table .kelas-cell { text-align: center; vertical-align: middle; font-weight: 700; }
+          .tambahan-print-table .tambahan-day-col { width: ${tambahanDayWidth}px; }
+          .session-item + .session-item { margin-top: 2px; }
+          .session-mapel { font-weight: 700; }
+          .session-pengajar { color: #334155; }
+          .session-waktu { color: #0f172a; }
+          .cell-empty { color: #64748b; }
+          hr { border: 0; border-top: 1px dashed #cbd5e1; margin: 2px 0; }
           @media print {
             html, body { height: 100%; }
             .print-sheet { height: 100%; }
@@ -261,9 +292,13 @@ const printHtmlDocument = (title: string, content: string, copies = 5) => {
       printWindow.focus();
       printWindow.print();
     }, 300);
+    return { success: true };
   } catch (_error) {
     printWindow.close();
-    window.alert("Gagal membuka preview print. Coba izinkan popup dan ulangi lagi.");
+    return {
+      success: false,
+      message: "Gagal membuka preview print. Coba izinkan popup dan ulangi lagi.",
+    };
   }
 };
 
@@ -291,6 +326,8 @@ export function PrintJadwalView({
   const [selectedScheduleType, setSelectedScheduleType] = useState<ScheduleType>("reguler");
   const [selectedClassKey, setSelectedClassKey] = useState("");
   const [printCopies, setPrintCopies] = useState(5);
+  const [printError, setPrintError] = useState("");
+  const [printOrientation, setPrintOrientation] = useState<PrintOrientation>("landscape");
 
   const selectedMonthDate = useMemo(() => {
     const [year, month] = selectedMonthKey.split("-").map(Number);
@@ -337,6 +374,7 @@ export function PrintJadwalView({
 
   useEffect(() => {
     setSelectedClassKey("");
+    setPrintError("");
   }, [selectedScheduleType, selectedMonthKey]);
 
   const selectedClassGroup = useMemo(
@@ -374,6 +412,7 @@ export function PrintJadwalView({
       : tambahanVisibleDates.length > 0);
 
   const handlePrint = () => {
+    setPrintError("");
     if (!selectedClassGroup) {
       return;
     }
@@ -382,26 +421,35 @@ export function PrintJadwalView({
     }
     if (selectedScheduleType === "reguler") {
       const tableHtml = getRegularTableHtml(regularDayColumns, [selectedClassGroup], mapelNameByKode);
-      printHtmlDocument(
+      const result = printHtmlDocument(
         "Print Jadwal Reguler",
         `${getPrintHeaderHtml(titleSchedule, titleCabang)}
          ${tableHtml}`,
-        printCopies
+        printCopies,
+        printOrientation
       );
+      if (!result.success) {
+        setPrintError(result.message || "Gagal membuka preview print.");
+      }
       return;
     }
     const tableHtml = getTambahanTableHtml(tambahanVisibleDates, [selectedClassGroup], mapelNameByKode);
-    printHtmlDocument(
+    const result = printHtmlDocument(
       "Print Jadwal Tambahan & Pelayanan",
       `${getPrintHeaderHtml(titleSchedule, titleCabang)}
        ${tableHtml}`,
-      printCopies
+      printCopies,
+      printOrientation
     );
+    if (!result.success) {
+      setPrintError(result.message || "Gagal membuka preview print.");
+    }
   };
 
   return (
     <div className="mt-4">
-      <div className="d-flex flex-wrap align-items-end gap-2 mb-3">
+      <div className="print-controls-panel mb-3">
+        <div className="d-flex flex-wrap align-items-end gap-2">
         <div>
           <label className="form-label mb-1">Pilih Jadwal</label>
           <select
@@ -456,15 +504,28 @@ export function PrintJadwalView({
             ))}
           </select>
         </div>
+        <div>
+          <label className="form-label mb-1">Orientasi</label>
+          <select
+            className="form-select form-select-sm"
+            value={printOrientation}
+            onChange={(event) => setPrintOrientation(event.target.value as PrintOrientation)}
+          >
+            <option value="landscape">Landscape</option>
+            <option value="portrait">Portrait</option>
+          </select>
+        </div>
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm px-3"
           onClick={handlePrint}
           disabled={!canPrint}
         >
           <i className="bi bi-printer me-1" /> Print Jadwal
         </button>
+        </div>
       </div>
+      {printError ? <div className="alert alert-danger py-2 mb-3">{printError}</div> : null}
       {!selectedClassGroup ? (
         <div className="alert alert-info py-2 mb-0">Pilih jadwal, bulan, dan kelas untuk menampilkan jadwal print.</div>
       ) : !canPrint ? (
@@ -473,12 +534,16 @@ export function PrintJadwalView({
         </div>
       ) : (
       <>
-      <div className="mb-2 text-start">
+      <div className="mb-2 text-start print-title-stack">
         <div className="fw-bold">{titleSchedule}</div>
         <div className="fw-bold">NEUTRON YOGYAKARTA</div>
         <div className="fw-bold">{titleCabang || "CABANG -"}</div>
       </div>
-      <div className="table-responsive border rounded">
+      <div
+        className={`table-responsive border rounded print-preview-shell ${
+          printOrientation === "portrait" ? "print-preview-portrait" : "print-preview-landscape"
+        }`}
+      >
         {selectedScheduleType === "reguler" ? (
         <table className="table table-sm table-bordered align-middle mb-0 print-preview-table">
           <colgroup>
@@ -544,9 +609,9 @@ export function PrintJadwalView({
                             <td key={`${rowKey}-${slot.date}-tanggal`} className="text-nowrap">
                               {slot.label}
                             </td>
-                            <td key={`${rowKey}-${slot.date}-mapel`} className="print-mapel-col">
+                             <td key={`${rowKey}-${slot.date}-mapel`} className="print-mapel-col">
                               {entries.map((entry, idx) => (
-                                <div key={`${entry.id}-${idx}`}>
+                                 <div key={`${entry.id}-${idx}`} className="session-item">
                                   <span className="name-chip" style={getTagStyle(getDisplayMapel(entry.mapel || "", mapelNameByKode), "mapel")}>
                                     {getDisplayMapel(entry.mapel || "", mapelNameByKode)}
                                   </span>
