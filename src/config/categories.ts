@@ -66,6 +66,20 @@ export const categories: CategoryConfig[] = [
     description: "",
     fields: [],
   },
+  {
+    key: "penempatanPengajar",
+    name: "Penempatan Pengajar",
+    icon: "bi-diagram-3",
+    description: "",
+    fields: [],
+  },
+  {
+    key: "permintaanPengajarAntarCabang",
+    name: "Permintaan Pengajar Antar Cabang",
+    icon: "bi-arrow-left-right",
+    description: "",
+    fields: [],
+  },
 ];
 
 export const initialRecords: Record<string, RecordItem[]> = {

@@ -12,6 +12,8 @@ type EditScheduleModalProps = {
   };
   mapelOptions: SelectOption[];
   pengajarOptions: SelectOption[];
+  pengajarAvailabilityWarning: string;
+  pengajarAvailableDateLabels: string[];
   conflictError: string;
   saving: boolean;
   onClose: () => void;
@@ -49,6 +51,8 @@ export function EditScheduleModal({
   draft,
   mapelOptions,
   pengajarOptions,
+  pengajarAvailabilityWarning,
+  pengajarAvailableDateLabels,
   conflictError,
   saving,
   onClose,
@@ -115,6 +119,12 @@ export function EditScheduleModal({
             placeholder="Pilih atau cari pengajar..."
             isClearable
             isSearchable
+            isDisabled={!draft.mapel}
+            noOptionsMessage={() =>
+              draft.mapel
+                ? "Tidak ada pengajar sesuai mapel"
+                : "Pilih mata pelajaran terlebih dulu"
+            }
             styles={compactSelectStyles}
           />
           <div className="row g-2 mt-3">
@@ -137,6 +147,18 @@ export function EditScheduleModal({
               />
             </div>
           </div>
+          {draft.pengajar && (
+            <div className="text-muted small mt-2">
+              Keterangan: pengajar kosong pada tanggal {pengajarAvailableDateLabels.length > 0
+                ? pengajarAvailableDateLabels.join(", ")
+                : "-"}.
+            </div>
+          )}
+          {pengajarAvailabilityWarning && (
+            <div className="alert alert-warning py-2 text-xs mt-3" role="alert">
+              {pengajarAvailabilityWarning}
+            </div>
+          )}
           {conflictError && (
             <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
               {conflictError}

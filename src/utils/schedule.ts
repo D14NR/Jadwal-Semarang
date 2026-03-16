@@ -194,6 +194,32 @@ export const parseTimeValue = (value: string) => {
   return hours * 60 + minutes;
 };
 
+export const formatTimeHHMM = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const directMatch = trimmed.match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?$/);
+  if (directMatch) {
+    const hours = directMatch[1].padStart(2, "0");
+    const minutes = directMatch[2];
+    return `${hours}:${minutes}`;
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Jakarta",
+    });
+  }
+
+  return trimmed;
+};
+
 export const parseRangeFromString = (value: string) => {
   const parts = value.split("-").map((part) => part.trim());
   if (parts.length < 2) {

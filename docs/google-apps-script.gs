@@ -2,6 +2,7 @@ const SHEET_NAME = "Jadwal Bulan ini";
 const JADWAL_KHUSUS_SHEET = "Jadwal Khusus";
 const SURAT_TUGAS_SHEET = "Surat Tugas Pengajar";
 const MATA_PELAJARAN_SHEET = "Mata Pelajaran";
+const PERMINTAAN_PENGAJAR_SHEET = "Permintaan Pengajar Antar Cabang";
 
 const REQUIRED_COLUMNS = [
   "Cabang",
@@ -33,6 +34,8 @@ const normalizeHeader = (value) => String(value || "").trim().toLowerCase();
 
 const normalizeText = (value) => String(value || "").trim();
 
+const normalizeKey = (value) => normalizeText(value).toLowerCase();
+
 const normalizeDateKey = (value) => {
   if (value === undefined || value === null || value === "") {
     return "";
@@ -43,6 +46,23 @@ const normalizeDateKey = (value) => {
     return Utilities.formatDate(dateValue, tz, "yyyy-MM-dd");
   }
   return String(value).trim();
+};
+
+const isDateInRange = (dateKey, startKey, endKey) => {
+  if (!dateKey) {
+    return false;
+  }
+  const start = startKey || endKey;
+  const end = endKey || startKey;
+  if (!start && !end) {
+    return true;
+  }
+  const normalizedStart = normalizeDateKey(start);
+  const normalizedEnd = normalizeDateKey(end);
+  if (!normalizedStart || !normalizedEnd) {
+    return true;
+  }
+  return dateKey >= normalizedStart && dateKey <= normalizedEnd;
 };
 
 const getSheetByName = (sheetName, spreadsheetId) => {
@@ -399,6 +419,293 @@ function doPost(e) {
           sheet.appendRow(newRow);
           return buildResponse({ success: true, message: "Mata pelajaran ditambahkan." });
         }
+      }
+    }
+
+    if (targetSheetName === "Penempatan Pengajar") {
+      const placementHeaders = [
+        "Kode Pengajar",
+        "Nama Pengajar",
+        "Domisili",
+        "Hari",
+        "Jam Mulai",
+        "Jam Selesai",
+        "Cabang Penempatan",
+      ];
+      const sheet = getSheetByName("Penempatan Pengajar", spreadsheetId);
+      const lastColumn = Math.max(sheet.getLastColumn(), placementHeaders.length);
+      const existingHeaders =
+        sheet.getLastRow() > 0
+          ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map((value) => String(value || ""))
+          : [];
+
+      const finalHeaders = existingHeaders.slice();
+      placementHeaders.forEach((header) => {
+        if (finalHeaders.indexOf(header) === -1) {
+          finalHeaders.push(header);
+        }
+      });
+
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow(finalHeaders);
+      } else if (String(existingHeaders.join("||")) !== String(finalHeaders.join("||"))) {
+        sheet.getRange(1, 1, 1, finalHeaders.length).setValues([finalHeaders]);
+      }
+
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0] || finalHeaders;
+      const headerMap = getHeaderMap(headers);
+      const record = payload.record || {};
+      const oldRecord = payload.oldRecord || null;
+
+      const buildRow = (source) =>
+        headers.map((header) => (source[header] !== undefined ? source[header] : ""));
+
+      const matchRowIndex = (sourceRecord) => {
+        if (!sourceRecord) {
+          return -1;
+        }
+        const keyFields = [
+          "Kode Pengajar",
+          "Hari",
+          "Jam Mulai",
+          "Jam Selesai",
+          "Cabang Penempatan",
+        ];
+        return values.findIndex((row, index) => {
+          if (index === 0) {
+            return false;
+          }
+          return keyFields.every((field) => {
+            const columnIndex = headerMap[normalizeHeader(field)];
+            if (columnIndex === undefined) {
+              return false;
+            }
+            return normalizeText(row[columnIndex]) === normalizeText(sourceRecord[field]);
+          });
+        });
+      };
+
+      if (action === "deletePenempatanPengajar") {
+        const rowIndex = matchRowIndex(record);
+        if (rowIndex > 0) {
+          sheet.deleteRow(rowIndex + 1);
+          return buildResponse({ success: true, message: "Penempatan pengajar dihapus." });
+        }
+        return buildResponse({ success: false, message: "Penempatan pengajar tidak ditemukan." });
+      }
+
+      if (action === "savePenempatanPengajar") {
+        const rowIndex = matchRowIndex(oldRecord || record);
+        const newRow = buildRow(record);
+        if (rowIndex > 0) {
+          sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRow]);
+          return buildResponse({ success: true, message: "Penempatan pengajar diperbarui." });
+        }
+        sheet.appendRow(newRow);
+        return buildResponse({ success: true, message: "Penempatan pengajar ditambahkan." });
+      }
+    }
+
+    if (targetSheetName === PERMINTAAN_PENGAJAR_SHEET) {
+      const requestHeaders = [
+        "ID",
+        "Kode Pengajar",
+        "Nama Pengajar",
+        "Cabang Peminta",
+        "Cabang Domisili",
+        "Tanggal Mulai",
+        "Tanggal Selesai",
+        "Tanggal Khusus",
+        "Hari",
+        "Jam Mulai",
+        "Jam Selesai",
+        "Status",
+        "Catatan",
+      ];
+      const sheet = getSheetByName(PERMINTAAN_PENGAJAR_SHEET, spreadsheetId);
+      const lastColumn = Math.max(sheet.getLastColumn(), requestHeaders.length);
+      const existingHeaders =
+        sheet.getLastRow() > 0
+          ? sheet.getRange(1, 1, 1, lastColumn).getValues()[0].map((value) => String(value || ""))
+          : [];
+
+      const finalHeaders = existingHeaders.slice();
+      requestHeaders.forEach((header) => {
+        if (finalHeaders.indexOf(header) === -1) {
+          finalHeaders.push(header);
+        }
+      });
+
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow(finalHeaders);
+      } else if (String(existingHeaders.join("||")) !== String(finalHeaders.join("||"))) {
+        sheet.getRange(1, 1, 1, finalHeaders.length).setValues([finalHeaders]);
+      }
+
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0] || finalHeaders;
+      const headerMap = getHeaderMap(headers);
+      const record = payload.record || {};
+      const targetId = normalizeText(record.ID || record.Id || record.id);
+
+      const buildRow = (source) => headers.map((header) => (source[header] !== undefined ? source[header] : ""));
+
+      const findRowIndexById = (idValue) => {
+        if (!idValue) {
+          return -1;
+        }
+        return values.findIndex((row, index) => {
+          if (index === 0) {
+            return false;
+          }
+          const idIndex = headerMap[normalizeHeader("ID")];
+          return normalizeText(row[idIndex]) === normalizeText(idValue);
+        });
+      };
+
+      if (action === "deletePermintaanPengajar") {
+        const rowIndex = findRowIndexById(targetId);
+        if (rowIndex > 0) {
+          const row = values[rowIndex] || [];
+          const cabangPemintaIndex = headerMap[normalizeHeader("Cabang Peminta")];
+          const kodePengajarIndex = headerMap[normalizeHeader("Kode Pengajar")];
+          const tanggalMulaiIndex = headerMap[normalizeHeader("Tanggal Mulai")];
+          const tanggalSelesaiIndex = headerMap[normalizeHeader("Tanggal Selesai")];
+          const tanggalKhususIndex = headerMap[normalizeHeader("Tanggal Khusus")];
+          const cabangPeminta = cabangPemintaIndex === undefined ? "" : normalizeText(row[cabangPemintaIndex]);
+          const kodePengajar = kodePengajarIndex === undefined ? "" : normalizeText(row[kodePengajarIndex]);
+          const tanggalMulai =
+            tanggalMulaiIndex === undefined ? "" : normalizeDateKey(row[tanggalMulaiIndex]);
+          const tanggalSelesai =
+            tanggalSelesaiIndex === undefined ? "" : normalizeDateKey(row[tanggalSelesaiIndex]);
+          const tanggalKhususRaw =
+            tanggalKhususIndex === undefined ? "" : normalizeText(row[tanggalKhususIndex]);
+          const tanggalKhususSet = new Set(
+            String(tanggalKhususRaw || "")
+              .split(/[\n,;|]+/)
+              .map((item) => normalizeDateKey(item))
+              .filter((item) => item)
+          );
+
+          sheet.deleteRow(rowIndex + 1);
+
+          if (cabangPeminta && kodePengajar) {
+            const affectedPairs = new Set();
+            const scheduleSheetNames = [SHEET_NAME, JADWAL_KHUSUS_SHEET];
+
+            scheduleSheetNames.forEach((scheduleName) => {
+              try {
+                const scheduleSheet = getSheet(spreadsheetId, scheduleName);
+                let scheduleHeaders = ensureHeaders(scheduleSheet);
+                scheduleHeaders = ensureOptionalHeaders(scheduleSheet, scheduleHeaders, OPTIONAL_SCHEDULE_COLUMNS);
+                const scheduleHeaderMap = getHeaderMap(scheduleHeaders);
+                const scheduleValues = scheduleSheet.getDataRange().getValues();
+                const cabangIndex = scheduleHeaderMap[normalizeHeader("Cabang")];
+                const pengajarIndex = scheduleHeaderMap[normalizeHeader("Pengajar")];
+                const tanggalIndex = scheduleHeaderMap[normalizeHeader("Tanggal")];
+
+                for (let scheduleRowIndex = scheduleValues.length - 1; scheduleRowIndex >= 1; scheduleRowIndex -= 1) {
+                  const scheduleRow = scheduleValues[scheduleRowIndex];
+                  const cabangValue = normalizeKey(scheduleRow[cabangIndex]);
+                  const pengajarValue = normalizeKey(scheduleRow[pengajarIndex]);
+                  if (
+                    cabangValue === normalizeKey(cabangPeminta) &&
+                    pengajarValue === normalizeKey(kodePengajar)
+                  ) {
+                    const tanggalKey = normalizeDateKey(scheduleRow[tanggalIndex]);
+                    if (tanggalKhususSet.size > 0) {
+                      if (!tanggalKhususSet.has(tanggalKey)) {
+                        continue;
+                      }
+                    } else if (!isDateInRange(tanggalKey, tanggalMulai, tanggalSelesai)) {
+                      continue;
+                    }
+                    if (tanggalKey) {
+                      affectedPairs.add(`${pengajarValue}||${tanggalKey}`);
+                    }
+                    scheduleSheet.deleteRow(scheduleRowIndex + 1);
+                  }
+                }
+              } catch (error) {
+                // Skip unavailable schedule sheets.
+              }
+            });
+
+            affectedPairs.forEach((pair) => {
+              const [pengajar, tanggalKey] = String(pair).split("||");
+              syncSuratTugas(pengajar, tanggalKey, spreadsheetId, SHEET_NAME);
+            });
+          }
+
+          return buildResponse({ success: true, message: "Permintaan pengajar dihapus." });
+        }
+        return buildResponse({ success: false, message: "Permintaan pengajar tidak ditemukan." });
+      }
+
+      if (action === "updatePermintaanStatus") {
+        const rowIndex = findRowIndexById(targetId);
+        if (rowIndex <= 0) {
+          return buildResponse({ success: false, message: "Permintaan pengajar tidak ditemukan." });
+        }
+        const statusColumn = headerMap[normalizeHeader("Status")];
+        if (statusColumn === undefined) {
+          return buildResponse({ success: false, message: "Kolom Status tidak ditemukan." });
+        }
+        values[rowIndex][statusColumn] = payload.status || "Menunggu";
+        sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([values[rowIndex]]);
+        return buildResponse({ success: true, message: "Status permintaan diperbarui." });
+      }
+
+      if (action === "savePermintaanPengajar") {
+        const rowIndex = findRowIndexById(targetId);
+        const kodePengajarIndex = headerMap[normalizeHeader("Kode Pengajar")];
+        const requestKodePengajar = normalizeKey(record["Kode Pengajar"] || "");
+
+        const findRowIndexesByKodePengajar = (kodePengajar) => {
+          if (kodePengajarIndex === undefined || !kodePengajar) {
+            return [];
+          }
+          const key = normalizeKey(kodePengajar);
+          const indexes = [];
+          for (let index = 1; index < values.length; index += 1) {
+            const row = values[index] || [];
+            const rowKode = normalizeKey(row[kodePengajarIndex]);
+            if (rowKode && rowKode === key) {
+              indexes.push(index);
+            }
+          }
+          return indexes;
+        };
+
+        const samePengajarIndexes = findRowIndexesByKodePengajar(requestKodePengajar);
+        let targetUpdateIndex = rowIndex;
+        if (targetUpdateIndex <= 0 && samePengajarIndexes.length > 0) {
+          targetUpdateIndex = samePengajarIndexes[0];
+        }
+
+        const newRow = buildRow(record);
+        if (targetUpdateIndex > 0) {
+          sheet.getRange(targetUpdateIndex + 1, 1, 1, headers.length).setValues([newRow]);
+
+          const duplicateIndexes = samePengajarIndexes
+            .filter((index) => index !== targetUpdateIndex)
+            .sort((a, b) => b - a);
+
+          duplicateIndexes.forEach((index) => {
+            sheet.deleteRow(index + 1);
+          });
+
+          return buildResponse({
+            success: true,
+            message:
+              duplicateIndexes.length > 0
+                ? "Permintaan pengajar diperbarui dan permintaan sebelumnya diganti otomatis."
+                : "Permintaan pengajar diperbarui.",
+          });
+        }
+        sheet.appendRow(newRow);
+        return buildResponse({ success: true, message: "Permintaan pengajar ditambahkan." });
       }
     }
 

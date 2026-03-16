@@ -14,6 +14,8 @@ type TopToolbarProps = {
   mapelStatus: StatusState;
   pengajarStatus: StatusState;
   suratTugasStatus: StatusState;
+  penempatanStatus: StatusState;
+  permintaanStatus: StatusState;
   onQueryChange: (value: string) => void;
   onMonthChange: (value: string) => void;
   onSuratMonthChange: (value: string) => void;
@@ -33,6 +35,8 @@ export function TopToolbar({
   mapelStatus,
   pengajarStatus,
   suratTugasStatus,
+  penempatanStatus,
+  permintaanStatus,
   onQueryChange,
   onMonthChange,
   onSuratMonthChange,
@@ -109,6 +113,12 @@ export function TopToolbar({
         )}
         {activeKey === "pengajar" && pengajarStatus.lastSync && (
           <span className="text-muted small">Terakhir sinkron: {pengajarStatus.lastSync}</span>
+        )}
+        {activeKey === "penempatanPengajar" && penempatanStatus.lastSync && (
+          <span className="text-muted small">Terakhir sinkron: {penempatanStatus.lastSync}</span>
+        )}
+        {activeKey === "permintaanPengajarAntarCabang" && permintaanStatus.lastSync && (
+          <span className="text-muted small">Terakhir sinkron: {permintaanStatus.lastSync}</span>
         )}
         {activeKey === "suratTugasMengajar" && suratTugasStatus.lastSync && (
           <span className="text-muted small">Terakhir sinkron: {suratTugasStatus.lastSync}</span>

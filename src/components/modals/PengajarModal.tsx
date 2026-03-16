@@ -1,3 +1,6 @@
+import Select from "react-select";
+import type { SelectOption } from "../../types/app";
+
 type PengajarDraft = {
   "Kode Pengajar": string;
   Nama: string;
@@ -13,37 +16,43 @@ type PengajarModalProps = {
   isOpen: boolean;
   isEditing: boolean;
   draft: PengajarDraft;
+  cabangLabel: string;
+  bidangStudiOptions: SelectOption[];
   error: string;
   loading: boolean;
   onClose: () => void;
   onChange: (field: keyof PengajarDraft, value: string) => void;
+  onBidangStudiChange: (values: string[]) => void;
+  onGeneratePassword: () => void;
   onSave: () => void;
 };
-
-const fields: Array<{ key: keyof PengajarDraft; label: string; placeholder: string }> = [
-  { key: "Kode Pengajar", label: "Kode Pengajar", placeholder: "Contoh: mk" },
-  { key: "Nama", label: "Nama", placeholder: "Nama Lengkap" },
-  { key: "Bidang Studi", label: "Bidang Studi", placeholder: "Contoh: Matematika" },
-  { key: "Email", label: "Email", placeholder: "email@example.com" },
-  { key: "No.WhatsApp", label: "No.WhatsApp", placeholder: "0812xxxxxx" },
-  { key: "Domisili", label: "Domisili", placeholder: "Semarang" },
-  { key: "Username", label: "Username", placeholder: "Username" },
-  { key: "Password", label: "Password", placeholder: "Password" },
-];
 
 export function PengajarModal({
   isOpen,
   isEditing,
   draft,
+  cabangLabel,
+  bidangStudiOptions,
   error,
   loading,
   onClose,
   onChange,
+  onBidangStudiChange,
+  onGeneratePassword,
   onSave,
 }: PengajarModalProps) {
   if (!isOpen) {
     return null;
   }
+
+  const bidangStudiValues = draft["Bidang Studi"]
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const selectedBidangStudi = bidangStudiValues.map((value) => {
+    const matched = bidangStudiOptions.find((option) => option.value.toLowerCase() === value.toLowerCase());
+    return matched || { value, label: value };
+  });
 
   return (
     <div
@@ -66,18 +75,111 @@ export function PengajarModal({
         </div>
         <div className="mt-3">
           <div className="row g-2">
-            {fields.map((field) => (
-              <div key={field.key} className="col-12 col-md-6">
-                <label className="form-label small fw-semibold mt-2">{field.label}</label>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Nama</label>
+              <input
+                type="text"
+                value={draft.Nama}
+                onChange={(event) => onChange("Nama", event.target.value)}
+                placeholder="Nama Lengkap"
+                className="form-control form-control-sm"
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Kode Pengajar</label>
+              <input
+                type="text"
+                value={draft["Kode Pengajar"]}
+                placeholder="Otomatis dari Nama"
+                className="form-control form-control-sm"
+                readOnly
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Cabang</label>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                value={cabangLabel}
+                placeholder="Otomatis dari akun login"
+                readOnly
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Domisili</label>
+              <input
+                type="text"
+                value={draft.Domisili}
+                placeholder="Otomatis dari Cabang"
+                className="form-control form-control-sm"
+                readOnly
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">No.WhatsApp</label>
+              <input
+                type="text"
+                value={draft["No.WhatsApp"]}
+                onChange={(event) => onChange("No.WhatsApp", event.target.value)}
+                placeholder="0812xxxxxx"
+                className="form-control form-control-sm"
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Username</label>
+              <input
+                type="text"
+                value={draft.Username}
+                placeholder="Otomatis dari No.WhatsApp"
+                className="form-control form-control-sm"
+                readOnly
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Bidang Studi</label>
+              <Select
+                isMulti
+                isSearchable
+                classNamePrefix="react-select"
+                options={bidangStudiOptions}
+                value={selectedBidangStudi}
+                placeholder="Pilih mata pelajaran yang diampu"
+                noOptionsMessage={() => "Data mata pelajaran tidak ditemukan"}
+                onChange={(selected) => {
+                  const nextValues = (selected || []).map((item) => item.value);
+                  onBidangStudiChange(nextValues);
+                }}
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Email</label>
+              <input
+                type="text"
+                value={draft.Email}
+                onChange={(event) => onChange("Email", event.target.value)}
+                placeholder="email@example.com"
+                className="form-control form-control-sm"
+              />
+            </div>
+            <div className="col-12 col-md-6">
+              <label className="form-label small fw-semibold mt-2">Password</label>
+              <div className="input-group input-group-sm">
                 <input
-                  type={field.key === "Password" ? "text" : "text"}
-                  value={draft[field.key]}
-                  onChange={(event) => onChange(field.key, event.target.value)}
-                  placeholder={field.placeholder}
-                  className="form-control form-control-sm"
+                  type="text"
+                  value={draft.Password}
+                  onChange={(event) => onChange("Password", event.target.value)}
+                  placeholder="Maksimal 6 karakter"
+                  className="form-control"
                 />
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={onGeneratePassword}
+                >
+                  Generate
+                </button>
               </div>
-            ))}
+            </div>
           </div>
 
           {error && (
