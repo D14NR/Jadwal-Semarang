@@ -5,6 +5,9 @@ type TopToolbarProps = {
   activeKey: string;
   activeName: string;
   query: string;
+  scheduleCabangOptions: string[];
+  selectedScheduleCabang: string;
+  allowAllCabang: boolean;
   monthOptions: Array<{ value: string; label: string }>;
   selectedMonthKey: string;
   selectedSuratTugasMonthKey: string;
@@ -17,6 +20,7 @@ type TopToolbarProps = {
   penempatanStatus: StatusState;
   permintaanStatus: StatusState;
   onQueryChange: (value: string) => void;
+  onScheduleCabangChange: (value: string) => void;
   onMonthChange: (value: string) => void;
   onSuratMonthChange: (value: string) => void;
   onSuratKodeChange: (value: string) => void;
@@ -26,6 +30,9 @@ export function TopToolbar({
   activeKey,
   activeName,
   query,
+  scheduleCabangOptions,
+  selectedScheduleCabang,
+  allowAllCabang,
   monthOptions,
   selectedMonthKey,
   selectedSuratTugasMonthKey,
@@ -38,6 +45,7 @@ export function TopToolbar({
   penempatanStatus,
   permintaanStatus,
   onQueryChange,
+  onScheduleCabangChange,
   onMonthChange,
   onSuratMonthChange,
   onSuratKodeChange,
@@ -55,6 +63,22 @@ export function TopToolbar({
             {monthOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {(activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan") && (
+          <select
+            className="form-select form-select-sm"
+            style={{ maxWidth: 220 }}
+            value={selectedScheduleCabang}
+            onChange={(event) => onScheduleCabangChange(event.target.value)}
+          >
+            {allowAllCabang ? <option value="">Semua cabang</option> : null}
+            {scheduleCabangOptions.map((cabang) => (
+              <option key={cabang} value={cabang}>
+                {cabang}
               </option>
             ))}
           </select>

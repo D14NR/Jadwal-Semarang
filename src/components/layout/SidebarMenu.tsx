@@ -4,7 +4,9 @@ type SidebarMenuProps = {
   categories: CategoryConfig[];
   activeKey: string;
   sidebarCollapsed: boolean;
+  isMobile?: boolean;
   onToggle: () => void;
+  onCloseMobile?: () => void;
   onSelect: (key: string) => void;
 };
 
@@ -12,7 +14,9 @@ export function SidebarMenu({
   categories,
   activeKey,
   sidebarCollapsed,
+  isMobile = false,
   onToggle,
+  onCloseMobile,
   onSelect,
 }: SidebarMenuProps) {
   return (
@@ -27,14 +31,26 @@ export function SidebarMenu({
               <div className="sidebar-brand-title">KBM-Qu</div>
             </div>
           )}
-          <button
-            type="button"
-            className="btn btn-sm sidebar-kaiadmin-toggle"
-            onClick={onToggle}
-            aria-label={sidebarCollapsed ? "Perlebar menu" : "Perkecil menu"}
-          >
-            <i className={`bi ${sidebarCollapsed ? "bi-chevron-right" : "bi-chevron-left"}`} />
-          </button>
+          {isMobile && onCloseMobile ? (
+            <button
+              type="button"
+              className="btn btn-sm sidebar-kaiadmin-toggle"
+              onClick={onCloseMobile}
+              aria-label="Tutup menu"
+            >
+              <i className="bi bi-x-lg" />
+            </button>
+          ) : null}
+          {!isMobile ? (
+            <button
+              type="button"
+              className="btn btn-sm sidebar-kaiadmin-toggle"
+              onClick={onToggle}
+              aria-label={sidebarCollapsed ? "Perlebar menu" : "Perkecil menu"}
+            >
+              <i className={`bi ${sidebarCollapsed ? "bi-chevron-right" : "bi-chevron-left"}`} />
+            </button>
+          ) : null}
         </div>
 
         {!sidebarCollapsed && <div className="sidebar-section-label">Main Menu</div>}
@@ -44,7 +60,12 @@ export function SidebarMenu({
             <button
               key={category.key}
               type="button"
-              onClick={() => onSelect(category.key)}
+              onClick={() => {
+                onSelect(category.key);
+                if (isMobile && onCloseMobile) {
+                  onCloseMobile();
+                }
+              }}
               title={category.name}
               aria-label={category.name}
               className={`sidebar-nav-item ${sidebarCollapsed ? "justify-content-center" : "justify-content-start"} ${

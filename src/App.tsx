@@ -178,9 +178,14 @@ export function App() {
   const [permintaanError, setPermintaanError] = useState("");
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [selectedMonthKey, setSelectedMonthKey] = useState(() =>
     formatLocalDate(new Date()).slice(0, 7)
   );
+  const [scheduleCabangView, setScheduleCabangView] = useState<Record<ScheduleMenuKey, string>>({
+    bulanIni: "",
+    jadwalTambahanPelayanan: "",
+  });
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -234,6 +239,12 @@ export function App() {
     : "bulanIni";
   const isAdmin = normalizeText(authSession?.role || "") === "admin";
   const restrictedCabang = !isAdmin ? (authSession?.cabang || "") : "";
+  const selectedScheduleCabang = scheduleCabangView[activeScheduleKey] || restrictedCabang || "";
+  const isScheduleReadOnly = Boolean(
+    restrictedCabang &&
+      selectedScheduleCabang &&
+      normalizeText(selectedScheduleCabang) !== normalizeText(restrictedCabang)
+  );
 
   const pushToast = (message: string, type: ToastType = "info") => {
     const id = `${Date.now()}-${Math.round(Math.random() * 10000)}`;
@@ -330,6 +341,21 @@ export function App() {
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, []);
+
+  const activeScheduleCabangOptions = useMemo(() => {
+    const set = new Set<string>();
+    (records[activeScheduleKey] ?? []).forEach((entry) => {
+      const cabang = (entry.cabang || "").trim();
+      if (cabang) {
+        set.add(cabang);
+      }
+    });
+    cabangOptions.forEach((cabang) => set.add(cabang));
+    if (restrictedCabang) {
+      set.add(restrictedCabang);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [activeScheduleKey, cabangOptions, records, restrictedCabang]);
 
   const pengajarPenempatanOptions = useMemo(() => {
     const source = restrictedCabang
@@ -786,9 +812,9 @@ export function App() {
   const monthScheduleGroups = useMemo(() => {
     const sourceRecords = records[activeScheduleKey] ?? [];
     const entries =
-      restrictedCabang
+      selectedScheduleCabang
         ? sourceRecords.filter(
-            (entry) => normalizeText(entry.cabang || "") === normalizeText(restrictedCabang)
+            (entry) => normalizeText(entry.cabang || "") === normalizeText(selectedScheduleCabang)
           )
         : sourceRecords;
     const grouped = new Map<
@@ -842,7 +868,7 @@ export function App() {
         )
       );
     });
-  }, [activeScheduleKey, query, records, restrictedCabang]);
+  }, [activeScheduleKey, query, records, selectedScheduleCabang]);
 
   const tambahanPrintGroups = useMemo(() => {
     const sourceRecords = records.jadwalTambahanPelayanan ?? [];
@@ -2194,6 +2220,7 @@ export function App() {
   const handleLogout = () => {
     localStorage.removeItem(authStorageKey);
     setAuthSession(null);
+    setSidebarMobileOpen(false);
     setLoginUsername("");
     setLoginPassword("");
     setLoginError("");
@@ -2228,6 +2255,10 @@ export function App() {
     if (!authSession) {
       return;
     }
+    setScheduleCabangView({
+      bulanIni: restrictedCabang || "",
+      jadwalTambahanPelayanan: restrictedCabang || "",
+    });
     handleLoadFromSheet("bulanIni");
     handleLoadFromSheet("jadwalTambahanPelayanan");
     handleLoadMapel();
@@ -2235,7 +2266,30 @@ export function App() {
     handleLoadSuratTugas();
     handleLoadPenempatanPengajar();
     handleLoadPermintaanPengajar();
-  }, [authSession]);
+  }, [authSession, restrictedCabang]);
+
+  useEffect(() => {
+    if (!sidebarMobileOpen) {
+      document.body.style.removeProperty("overflow");
+      return;
+    }
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.removeProperty("overflow");
+    };
+  }, [sidebarMobileOpen]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 992) {
+        setSidebarMobileOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
 
   const handleDraftChange = (
     fieldKey: "mapel" | "pengajar" | "waktuMulai" | "waktuSelesai",
@@ -2273,6 +2327,10 @@ export function App() {
   };
 
   const handleOpenClassModal = () => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menambah kelas.", "error");
+      return;
+    }
     setClassDraft({ cabang: restrictedCabang || "", kelas: "", sekolah: "" });
     setClassError("");
     setIsClassModalOpen(true);
@@ -2290,6 +2348,10 @@ export function App() {
     nextKelasValue: string,
     nextSekolahValue: string
   ) => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat mengubah kelas.", "error");
+      return false;
+    }
     const cabang = group.cabang;
     const kelas = nextKelasValue.trim();
     const sekolah = (activeScheduleKey === "jadwalTambahanPelayanan"
@@ -2383,6 +2445,10 @@ export function App() {
   };
 
   const handleSaveNewClass = async () => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menambah kelas.", "error");
+      return;
+    }
     const cabang = restrictedCabang || classDraft.cabang.trim();
     const kelas = classDraft.kelas.trim();
     const sekolah = classDraft.sekolah.trim();
@@ -2442,6 +2508,10 @@ export function App() {
     sekolah: string;
     entriesByDate: Record<string, RecordItem[]>;
   }) => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menghapus kelas.", "error");
+      return;
+    }
     const confirmation = window.confirm(
       `Hapus seluruh jadwal untuk ${group.kelas} (${group.cabang})? Tindakan ini akan menghapus semua data terkait di Surat Tugas Pengajar.`
     );
@@ -2571,6 +2641,9 @@ export function App() {
     slot: { date: string; label: string },
     entry?: RecordItem
   ) => {
+    if (isScheduleReadOnly) {
+      return;
+    }
     const targetEntry = entry;
     if (
       editingSlot &&
@@ -2601,6 +2674,10 @@ export function App() {
   };
 
   const handleSaveSlot = async () => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat mengubah jadwal.", "error");
+      return;
+    }
     if (!editingSlot) {
       return;
     }
@@ -2742,6 +2819,10 @@ export function App() {
   };
 
   const handleDeleteSlot = async () => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menghapus jadwal.", "error");
+      return;
+    }
     if (!editingSlot) {
       return;
     }
@@ -2811,7 +2892,7 @@ export function App() {
     <div className="min-vh-100 app-font-10 app-shell">
       <div className="container-fluid py-4">
         <div className="row g-4">
-          <div className={`col-12 ${sidebarCollapsed ? "col-lg-1" : "col-lg-2"}`}>
+          <div className={`d-none d-lg-block ${sidebarCollapsed ? "col-lg-1" : "col-lg-2"}`}>
             <SidebarMenu
               categories={categories}
               activeKey={activeKey}
@@ -2833,11 +2914,21 @@ export function App() {
             <div className="card shadow-sm mb-4 surface-panel app-header-card">
               <div className="card-body">
                 <div className="d-flex justify-content-between align-items-center gap-2">
-                  <div>
+                  <div className="d-flex align-items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary btn-sm d-lg-none"
+                      onClick={() => setSidebarMobileOpen(true)}
+                      aria-label="Buka menu"
+                    >
+                      <i className="bi bi-list" />
+                    </button>
+                    <div>
                     <h2 className="h4 mb-0">{activeConfig.name}</h2>
                     <div className="text-muted small mt-1">
                       Login sebagai: {authSession.username}
                       {authSession.cabang ? ` (${authSession.cabang})` : ""}
+                    </div>
                     </div>
                   </div>
                   <button type="button" className="btn btn-outline-danger btn-sm" onClick={handleLogout}>
@@ -2853,6 +2944,9 @@ export function App() {
                   activeKey={activeKey}
                   activeName={activeConfig.name}
                   query={query}
+                  scheduleCabangOptions={activeScheduleCabangOptions}
+                  selectedScheduleCabang={selectedScheduleCabang}
+                  allowAllCabang={!restrictedCabang}
                   monthOptions={monthOptions}
                   selectedMonthKey={selectedMonthKey}
                   selectedSuratTugasMonthKey={selectedSuratTugasMonthKey}
@@ -2865,6 +2959,16 @@ export function App() {
                   penempatanStatus={penempatanStatus}
                   permintaanStatus={permintaanStatus}
                   onQueryChange={setQuery}
+                  onScheduleCabangChange={(nextCabang) => {
+                    if (!isScheduleMenuKey(activeKey)) {
+                      return;
+                    }
+                    setScheduleCabangView((prev) => ({
+                      ...prev,
+                      [activeKey]: nextCabang,
+                    }));
+                    clearEditing();
+                  }}
                   onMonthChange={(nextMonth) => {
                     setSelectedMonthKey(nextMonth);
                     setSelectedSuratTugasMonthKey(nextMonth);
@@ -2920,6 +3024,7 @@ export function App() {
                 {activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan" ? (
                   <ScheduleTableView
                     isJadwalTambahanMenu={isJadwalTambahanMenu}
+                    readOnly={isScheduleReadOnly}
                     activeScheduleDates={activeScheduleDates}
                     activeDayGroups={activeDayGroups}
                     activeDayStartIndexes={activeDayStartIndexes}
@@ -3094,6 +3199,33 @@ export function App() {
 
       <LoadingOverlay show={isBusy} message={busyMessage} />
       <ToastStack toasts={toasts} onClose={dismissToast} />
+
+      <div
+        className={`sidebar-mobile-backdrop d-lg-none ${sidebarMobileOpen ? "show" : ""}`}
+        onClick={() => setSidebarMobileOpen(false)}
+        aria-hidden={!sidebarMobileOpen}
+      />
+      <div className={`sidebar-mobile d-lg-none ${sidebarMobileOpen ? "show" : ""}`}>
+        <SidebarMenu
+          categories={categories}
+          activeKey={activeKey}
+          sidebarCollapsed={false}
+          isMobile
+          onCloseMobile={() => setSidebarMobileOpen(false)}
+          onToggle={() => {
+            // Desktop collapse is not used in mobile drawer.
+          }}
+          onSelect={(key) => {
+            setActiveKey(key);
+            setQuery("");
+            setSelectedSuratTugasKode("");
+            clearEditing();
+            setIsClassModalOpen(false);
+            setIsPenempatanModalOpen(false);
+            setIsPermintaanModalOpen(false);
+          }}
+        />
+      </div>
     </div>
   );
 }

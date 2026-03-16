@@ -185,14 +185,48 @@ const formatDisplayDateFromKey = (dateKey) => {
   return Utilities.formatDate(dateValue, tz, "d MMM yyyy");
 };
 
-const formatSessionEntry = (row, headerMap) => {
+const formatUpdateTimestamp = (dateValue) => {
+  const value = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (isNaN(value.getTime())) {
+    return "";
+  }
+  const tz = Session.getScriptTimeZone() || "Asia/Jakarta";
+  const day = Utilities.formatDate(value, tz, "d");
+  const monthIndex = Number(Utilities.formatDate(value, tz, "M")) - 1;
+  const year = Utilities.formatDate(value, tz, "yyyy");
+  const time = Utilities.formatDate(value, tz, "HH:mm:ss");
+  const monthNames = [
+    "januari",
+    "februari",
+    "maret",
+    "april",
+    "mei",
+    "juni",
+    "juli",
+    "agustus",
+    "september",
+    "oktober",
+    "november",
+    "desember",
+  ];
+  const month = monthNames[monthIndex] || Utilities.formatDate(value, tz, "MMM").toLowerCase();
+  return `${day} ${month} ${year} ${time}`;
+};
+
+const formatSessionEntry = (row, headerMap, updateLabel) => {
   const cabang = normalizeText(row[headerMap[normalizeHeader("Cabang")]]);
   const kelas = normalizeText(row[headerMap[normalizeHeader("Kelas")]]);
+  const sekolahIndex = headerMap[normalizeHeader("Sekolah")];
+  const sekolah = sekolahIndex === undefined ? "" : normalizeText(row[sekolahIndex]);
   const mapel = normalizeText(row[headerMap[normalizeHeader("Mapel")]]);
   const waktu = normalizeText(row[headerMap[normalizeHeader("Waktu")]]);
-  const sessionMapel = [mapel, kelas].filter(Boolean).join("-");
+  const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ").trim();
+  const sessionMapel = [mapel, kelasLabel].filter(Boolean).join("-");
   const session = [waktu, sessionMapel, cabang].filter(Boolean).join("/");
-  return session.trim();
+  if (!updateLabel) {
+    return session.trim();
+  }
+  return `${session.trim()} update ${updateLabel}`.trim();
 };
 
 const getScheduleSheetsForSurat = (targetSheetName) => {
@@ -229,6 +263,7 @@ const syncSuratTugas = (pengajar, tanggalKey, spreadsheetId, jadwalSheetName) =>
     }
   });
 
+  const updateLabel = formatUpdateTimestamp(new Date());
   const sorted = matches
     .map((entry) => {
       const waktu = normalizeText(entry.row[entry.headerMap[normalizeHeader("Waktu")]]);
@@ -236,7 +271,7 @@ const syncSuratTugas = (pengajar, tanggalKey, spreadsheetId, jadwalSheetName) =>
       return { ...entry, start: start ?? 0 };
     })
     .sort((a, b) => a.start - b.start)
-    .map((item) => formatSessionEntry(item.row, item.headerMap));
+    .map((item) => formatSessionEntry(item.row, item.headerMap, updateLabel));
 
   const suratSheet = getSuratTugasSheet(spreadsheetId);
   const suratHeaders = ensureSuratTugasHeaders(suratSheet);

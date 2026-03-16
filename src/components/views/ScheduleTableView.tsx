@@ -5,6 +5,7 @@ import type { EditingSlot, RecordItem, ScheduleDayGroup, ScheduleGroup, Schedule
 
 type ScheduleTableViewProps = {
   isJadwalTambahanMenu: boolean;
+  readOnly: boolean;
   activeScheduleDates: ScheduleSlotDate[];
   activeDayGroups: ScheduleDayGroup[];
   activeDayStartIndexes: Set<number>;
@@ -19,6 +20,7 @@ type ScheduleTableViewProps = {
 
 export function ScheduleTableView({
   isJadwalTambahanMenu,
+  readOnly,
   activeScheduleDates,
   activeDayGroups,
   activeDayStartIndexes,
@@ -107,20 +109,24 @@ export function ScheduleTableView({
               monthScheduleGroups.map((group) => (
                 <tr key={`${group.cabang}-${group.kelas}-${group.sekolah || ""}`}>
                   <td className="text-center col-aksi sticky-col-aksi">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDeleteClass(group);
-                      }}
-                      className="btn btn-outline-danger btn-sm btn-icon"
-                      aria-label="Hapus kelas"
-                    >
-                      <i className="bi bi-trash" />
-                    </button>
+                    {readOnly ? (
+                      <span className="text-muted">-</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteClass(group);
+                        }}
+                        className="btn btn-outline-danger btn-sm btn-icon"
+                        aria-label="Hapus kelas"
+                      >
+                        <i className="bi bi-trash" />
+                      </button>
+                    )}
                   </td>
                   <td className="fw-semibold col-kelas sticky-col-kelas">
-                    {editingClassKey === `${group.cabang}||${group.kelas}||${group.sekolah || ""}` ? (
+                    {!readOnly && editingClassKey === `${group.cabang}||${group.kelas}||${group.sekolah || ""}` ? (
                       <div className="class-inline-editor" onClick={(event) => event.stopPropagation()}>
                         <input
                           value={kelasDraft}
@@ -180,6 +186,13 @@ export function ScheduleTableView({
                           </button>
                         </div>
                       </div>
+                    ) : readOnly ? (
+                      <div>
+                        <div className="schedule-class-main">{group.kelas}</div>
+                        {isJadwalTambahanMenu && group.sekolah ? (
+                          <div className="schedule-class-sub">{group.sekolah}</div>
+                        ) : null}
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -207,7 +220,11 @@ export function ScheduleTableView({
                     return (
                       <td
                         key={slot.date}
-                        onClick={() => onSelectSlot(group, slot)}
+                        onClick={() => {
+                          if (!readOnly) {
+                            onSelectSlot(group, slot);
+                          }
+                        }}
                         className={`schedule-cell ${
                           activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""
                         } ${isEditingCell && !editingSlot?.entryId ? "is-editing" : ""}`}
@@ -225,10 +242,13 @@ export function ScheduleTableView({
                                   className={`btn btn-outline-secondary text-start p-1 schedule-entry-btn ${
                                     isEditingEntry ? "active" : ""
                                   }`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onSelectSlot(group, slot, item);
-                                  }}
+                                   onClick={(event) => {
+                                     event.stopPropagation();
+                                     if (!readOnly) {
+                                       onSelectSlot(group, slot, item);
+                                     }
+                                   }}
+                                   disabled={readOnly}
                                 >
                                   <div className="fw-semibold text-xxs">
                                     <span className="name-chip" style={getTagStyle(item.mapel || `Sesi ${itemIndex + 1}`, "mapel")}>
@@ -261,14 +281,16 @@ export function ScheduleTableView({
             <tr>
               <td className="col-aksi sticky-col-aksi" />
               <td className="col-kelas sticky-col-kelas">
-                <button
-                  type="button"
-                  onClick={onOpenClassModal}
-                  className="btn btn-outline-primary btn-sm btn-icon"
-                  aria-label="Tambah kelas"
-                >
-                  <i className="bi bi-plus-lg" />
-                </button>
+                {readOnly ? null : (
+                  <button
+                    type="button"
+                    onClick={onOpenClassModal}
+                    className="btn btn-outline-primary btn-sm btn-icon"
+                    aria-label="Tambah kelas"
+                  >
+                    <i className="bi bi-plus-lg" />
+                  </button>
+                )}
               </td>
               <td colSpan={activeScheduleDates.length} />
             </tr>
@@ -276,7 +298,11 @@ export function ScheduleTableView({
         </table>
       </div>
 
-      <div className="alert alert-info mt-3 text-xs mb-0">Klik salah satu sel pada tabel jadwal untuk menambah atau mengedit data.</div>
+      <div className="alert alert-info mt-3 text-xs mb-0">
+        {readOnly
+          ? "Mode lihat cabang lain aktif. Anda hanya dapat melihat jadwal tanpa mengubah data."
+          : "Klik salah satu sel pada tabel jadwal untuk menambah atau mengedit data."}
+      </div>
     </>
   );
 }
