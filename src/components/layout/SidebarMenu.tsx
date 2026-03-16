@@ -16,23 +16,30 @@ export function SidebarMenu({
   onSelect,
 }: SidebarMenuProps) {
   return (
-    <div className={`card shadow-sm sidebar-card surface-panel ${sidebarCollapsed ? "is-collapsed" : ""}`}>
-      <div className="card-body py-3 px-2">
-        <div className="d-flex align-items-center justify-content-between mb-3 sidebar-header">
-          <div className="d-flex align-items-center gap-2">
-            <i className="bi bi-grid fs-4 text-primary" />
-            {!sidebarCollapsed && <span className="fw-semibold">Menu</span>}
+    <aside className={`sidebar-kaiadmin ${sidebarCollapsed ? "is-collapsed" : ""}`}>
+      <div className="sidebar-kaiadmin-inner">
+        <div className="sidebar-brand-wrap">
+          <div className="sidebar-brand-mark">
+            <i className="bi bi-mortarboard" />
           </div>
+          {!sidebarCollapsed && (
+            <div className="sidebar-brand-text">
+              <div className="sidebar-brand-title">KBM-Qu</div>
+            </div>
+          )}
           <button
             type="button"
-            className="btn btn-light btn-sm sidebar-toggle"
+            className="btn btn-sm sidebar-kaiadmin-toggle"
             onClick={onToggle}
             aria-label={sidebarCollapsed ? "Perlebar menu" : "Perkecil menu"}
           >
             <i className={`bi ${sidebarCollapsed ? "bi-chevron-right" : "bi-chevron-left"}`} />
           </button>
         </div>
-        <div className="list-group list-group-flush">
+
+        {!sidebarCollapsed && <div className="sidebar-section-label">Main Menu</div>}
+
+        <div className="sidebar-nav-list">
           {categories.map((category) => (
             <button
               key={category.key}
@@ -40,16 +47,18 @@ export function SidebarMenu({
               onClick={() => onSelect(category.key)}
               title={category.name}
               aria-label={category.name}
-              className={`list-group-item list-group-item-action d-flex align-items-center gap-2 sidebar-icon-btn ${
-                sidebarCollapsed ? "justify-content-center" : "justify-content-start"
-              } ${activeKey === category.key ? "active" : ""} sidebar-menu-btn`}
+              className={`sidebar-nav-item ${sidebarCollapsed ? "justify-content-center" : "justify-content-start"} ${
+                activeKey === category.key ? "active" : ""
+              }`}
             >
-              <i className={`bi ${category.icon}`} />
+              <span className="sidebar-nav-icon">
+                <i className={`bi ${category.icon}`} />
+              </span>
               <span className="sidebar-label">{category.name}</span>
             </button>
           ))}
         </div>
       </div>
-    </div>
+    </aside>
   );
 }

@@ -1,4 +1,5 @@
 import type { MonitoringRow } from "../../types/app";
+import { getTagStyle } from "../../utils/tagColor";
 
 type MonitoringKelasViewProps = {
   loading: boolean;
@@ -48,7 +49,13 @@ export function MonitoringKelasView({ loading, rows }: MonitoringKelasViewProps)
                   {row.mapelList.length === 0 ? (
                     <span className="text-muted">-</span>
                   ) : (
-                    row.mapelList.map((mapelLabel) => <div key={`${row.cabang}-${row.kelas}-${mapelLabel}`}>{mapelLabel}</div>)
+                    row.mapelList.map((mapelLabel) => (
+                      <div key={`${row.cabang}-${row.kelas}-${mapelLabel}`}>
+                        <span className="name-chip" style={getTagStyle(mapelLabel, "mapel")}>
+                          {mapelLabel}
+                        </span>
+                      </div>
+                    ))
                   )}
                 </td>
                 <td className="text-center">{row.jumlahMapel}</td>

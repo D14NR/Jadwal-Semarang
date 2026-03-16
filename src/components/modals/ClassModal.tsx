@@ -1,5 +1,6 @@
 type ClassModalProps = {
   isOpen: boolean;
+  isEditing?: boolean;
   classDraft: { cabang: string; kelas: string; sekolah: string };
   fixedCabang?: string;
   showSekolahField?: boolean;
@@ -11,6 +12,7 @@ type ClassModalProps = {
 
 export function ClassModal({
   isOpen,
+  isEditing,
   classDraft,
   fixedCabang,
   showSekolahField,
@@ -35,9 +37,11 @@ export function ClassModal({
       >
         <div className="d-flex justify-content-between align-items-start">
           <div>
-            <h5 className="mb-1">Tambah Kelas</h5>
+            <h5 className="mb-1">{isEditing ? "Edit Kelas" : "Tambah Kelas"}</h5>
             <div className="text-muted small">
-              {showSekolahField
+              {isEditing
+                ? "Perbarui nama kelas agar seluruh jadwal terkait ikut berubah."
+                : showSekolahField
                 ? "Tambahkan kelas dan sekolah agar tampil di Jadwal Tambahan & Pelayanan."
                 : "Tambahkan cabang dan kelas baru agar tampil di tabel jadwal."}
             </div>
@@ -87,7 +91,7 @@ export function ClassModal({
             Batal
           </button>
           <button type="button" className="btn btn-primary btn-sm" onClick={onSave}>
-            Simpan Kelas
+            {isEditing ? "Simpan Perubahan" : "Simpan Kelas"}
           </button>
         </div>
       </div>

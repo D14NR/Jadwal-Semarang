@@ -1169,6 +1169,103 @@ export function App() {
     setClassDraft((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleInlineSaveClass = async (
+    group: { cabang: string; kelas: string; sekolah: string },
+    nextKelasValue: string,
+    nextSekolahValue: string
+  ) => {
+    const cabang = group.cabang;
+    const kelas = nextKelasValue.trim();
+    const sekolah = (activeScheduleKey === "jadwalTambahanPelayanan"
+      ? nextSekolahValue
+      : group.sekolah || "").trim();
+    const shouldRequireSekolah = activeScheduleKey === "jadwalTambahanPelayanan";
+
+    if (!kelas || (shouldRequireSekolah && !sekolah)) {
+      pushToast(
+        shouldRequireSekolah
+          ? "Kelas dan Sekolah wajib diisi untuk jadwal tambahan."
+          : "Nama kelas wajib diisi.",
+        "error"
+      );
+      return false;
+    }
+
+    const hasDuplicate = (records[activeScheduleKey] ?? []).some((item) => {
+      const isCurrentClass =
+        item.cabang === group.cabang &&
+        item.kelas === group.kelas &&
+        (item.sekolah || "") === (group.sekolah || "");
+      if (isCurrentClass) {
+        return false;
+      }
+      const isTargetClass =
+        item.cabang === cabang &&
+        item.kelas === kelas &&
+        (shouldRequireSekolah ? (item.sekolah || "") === sekolah : true);
+      return isTargetClass;
+    });
+
+    if (hasDuplicate) {
+      pushToast("Nama kelas tersebut sudah ada.", "error");
+      return false;
+    }
+
+    const sourceItems = records[activeScheduleKey] ?? [];
+    const matchingItems = sourceItems.filter(
+      (item) =>
+        item.cabang === group.cabang &&
+        item.kelas === group.kelas &&
+        (item.sekolah || "") === (group.sekolah || "")
+    );
+    if (matchingItems.length === 0) {
+      pushToast("Data kelas tidak ditemukan.", "error");
+      return false;
+    }
+
+    setRecords((prev) => ({
+      ...prev,
+      [activeScheduleKey]: (prev[activeScheduleKey] ?? []).map((item) => {
+        if (
+          item.cabang === group.cabang &&
+          item.kelas === group.kelas &&
+          (item.sekolah || "") === (group.sekolah || "")
+        ) {
+          return { ...item, cabang, kelas, sekolah };
+        }
+        return item;
+      }),
+    }));
+
+    await Promise.all(
+      matchingItems.map((item) => {
+        const oldTanggal = resolveSheetTanggal(item.tanggalSheet || "", item.tanggal || "");
+        const oldRecord = buildSheetRecord(
+          group.cabang,
+          group.kelas,
+          oldTanggal,
+          item.mapel || "",
+          item.pengajar || "",
+          item.waktu || "",
+          group.sekolah || ""
+        );
+        const newRecord = buildSheetRecord(
+          cabang,
+          kelas,
+          oldTanggal,
+          item.mapel || "",
+          item.pengajar || "",
+          item.waktu || "",
+          sekolah
+        );
+        return postToSheet({ action: "upsert", record: newRecord, oldRecord });
+      })
+    );
+
+    pushToast("Nama kelas berhasil diperbarui.", "success");
+    return true;
+  };
+
   const handleSaveNewClass = async () => {
     const cabang = restrictedCabang || classDraft.cabang.trim();
     const kelas = classDraft.kelas.trim();
@@ -1182,6 +1279,7 @@ export function App() {
       );
       return;
     }
+
     const existing = (records[activeScheduleKey] ?? []).some(
       (item) =>
         item.cabang === cabang &&
@@ -1192,6 +1290,7 @@ export function App() {
       setClassError("Kelas tersebut sudah ada di jadwal.");
       return;
     }
+
     const firstSlot = activeScheduleDates[0];
     if (!firstSlot) {
       setClassError("Tanggal jadwal belum tersedia.");
@@ -1587,7 +1686,7 @@ export function App() {
 
 
   return (
-    <div className="min-vh-100 app-font-8 app-shell">
+    <div className="min-vh-100 app-font-10 app-shell">
       <div className="container-fluid py-4">
         <div className="row g-4">
           <div className={`col-12 ${sidebarCollapsed ? "col-lg-1" : "col-lg-2"}`}>
@@ -1688,6 +1787,8 @@ export function App() {
                     activeDayStartIndexes={activeDayStartIndexes}
                     monthScheduleGroups={monthScheduleGroups}
                     editingSlot={editingSlot}
+                    saving={sheetStatus.saving}
+                    onInlineSaveClass={handleInlineSaveClass}
                     onDeleteClass={handleDeleteClass}
                     onSelectSlot={handleSelectBulanIniSlot}
                     onOpenClassModal={handleOpenClassModal}
@@ -1747,7 +1848,10 @@ export function App() {
         fixedCabang={restrictedCabang || undefined}
         showSekolahField={activeScheduleKey === "jadwalTambahanPelayanan"}
         classError={classError}
-        onClose={() => setIsClassModalOpen(false)}
+        onClose={() => {
+          setIsClassModalOpen(false);
+          setClassError("");
+        }}
         onDraftChange={handleClassDraftChange}
         onSave={handleSaveNewClass}
       />

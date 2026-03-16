@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { buildMonthScheduleDates, formatScheduleLabelWithDay, parseFlexibleDate } from "../../utils/schedule";
+import { getTagStyle } from "../../utils/tagColor";
 import type { RecordItem, ScheduleDayGroup, ScheduleGroup, ScheduleSlotDate } from "../../types/app";
 
 type PrintJadwalViewProps = {
@@ -545,7 +546,11 @@ export function PrintJadwalView({
                             </td>
                             <td key={`${rowKey}-${slot.date}-mapel`} className="print-mapel-col">
                               {entries.map((entry, idx) => (
-                                <div key={`${entry.id}-${idx}`}>{getDisplayMapel(entry.mapel || "", mapelNameByKode)}</div>
+                                <div key={`${entry.id}-${idx}`}>
+                                  <span className="name-chip" style={getTagStyle(getDisplayMapel(entry.mapel || "", mapelNameByKode), "mapel")}>
+                                    {getDisplayMapel(entry.mapel || "", mapelNameByKode)}
+                                  </span>
+                                </div>
                               ))}
                             </td>
                             <td key={`${rowKey}-${slot.date}-waktu`} className="text-nowrap print-time-col">
@@ -587,7 +592,9 @@ export function PrintJadwalView({
                   <td key={`tambahan-${slot.date}`}>
                     {entries.map((entry, idx) => (
                       <div key={`${entry.id}-${idx}`}>
-                        <strong>{getDisplayMapel(entry.mapel || "", mapelNameByKode)}</strong>
+                        <span className="name-chip" style={getTagStyle(getDisplayMapel(entry.mapel || "", mapelNameByKode), "mapel")}>
+                          {getDisplayMapel(entry.mapel || "", mapelNameByKode)}
+                        </span>
                         <br />
                         {entry.waktu || "-"}
                       </div>
