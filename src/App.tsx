@@ -1198,6 +1198,23 @@ export function App() {
     );
   }, [mapelRecords, query]);
 
+  const filteredPengajarRecords = useMemo(() => {
+    const source = restrictedCabang
+      ? pengajarRecords.filter(
+          (record) => normalizeText(record["Domisili"] || "") === normalizeText(restrictedCabang)
+        )
+      : pengajarRecords;
+
+    if (!query.trim()) {
+      return source;
+    }
+
+    const lowered = query.toLowerCase();
+    return source.filter((record) =>
+      Object.values(record).some((value) => String(value).toLowerCase().includes(lowered))
+    );
+  }, [pengajarRecords, query, restrictedCabang]);
+
   const filteredPenempatanRecords = useMemo(() => {
     const source = restrictedCabang
       ? penempatanRecords.filter(
@@ -3171,8 +3188,8 @@ export function App() {
                   <PengajarTableView
                     headers={pengajarHeaders}
                     loading={pengajarStatus.loading}
-                    records={pengajarRecords}
-                    query={query}
+                    records={filteredPengajarRecords}
+                    query=""
                     onAdd={() => handleOpenPengajarModal()}
                     onEdit={handleOpenPengajarModal}
                     onDelete={handleDeletePengajar}

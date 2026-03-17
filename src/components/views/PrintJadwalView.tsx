@@ -222,9 +222,17 @@ const printHtmlDocument = (
       message: "Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.",
     };
   }
+  const printedAt = new Date().toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   const duplicatedContent = Array.from({ length: copies }, (_, index) => {
     const separatorClass = index < copies - 1 ? "copy-block with-separator" : "copy-block";
-    return `<section class="${separatorClass}">${content}</section>`;
+    return `<section class="${separatorClass}">${content}<div class="print-footer-meta">Dicetak ${printedAt}</div></section>`;
   }).join("");
 
   const isPortrait = orientation === "portrait";
@@ -241,35 +249,101 @@ const printHtmlDocument = (
         <meta charset="utf-8" />
         <title>${title}</title>
         <style>
-          @page { size: A4 ${orientation}; margin: 6mm; }
-          body { font-family: Inter, Arial, sans-serif; margin: 0; font-size: 8px; color: #0f172a; }
-          .print-sheet { display: flex; flex-direction: column; gap: 4px; height: 100%; }
-          .copy-block { flex: 1 1 0; overflow: hidden; padding: 3px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; }
-          .copy-block.with-separator { border-bottom: 1px dashed #adb5bd; }
-          .print-title-block { margin: 0 0 4px; text-align: left; }
-          .print-title-line { font-size: 9px; font-weight: 700; line-height: 1.15; letter-spacing: 0.02em; }
-          .muted { color: #6c757d; }
-          table { border-collapse: collapse; width: 100%; margin-top: 3px; }
-          th, td { border: 1px solid #94a3b8; padding: 2px 3px; vertical-align: top; }
-          th { background: #e2e8f0; font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
-          td { font-size: 7px; line-height: 1.2; }
+          @page { size: A4 ${orientation}; margin: 5mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            margin: 0;
+            font-size: 8px;
+            color: #0f172a;
+            background: #ffffff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .print-sheet { display: flex; flex-direction: column; gap: 3px; height: 100%; }
+          .copy-block {
+            flex: 1 1 0;
+            overflow: hidden;
+            padding: 3px 4px;
+            border: 1px solid #bfc9d8;
+            border-radius: 8px;
+            background: #ffffff;
+          }
+          .copy-block.with-separator { border-bottom: 1px dashed #9aa9bc; }
+          .print-title-block {
+            margin: 0 0 4px;
+            text-align: left;
+            padding: 3px 6px;
+            border: 1px solid #d5deea;
+            border-left: 4px solid #1d4ed8;
+            border-radius: 6px;
+            background: #f8fbff;
+          }
+          .print-title-line { font-size: 9px; font-weight: 700; line-height: 1.2; letter-spacing: 0.02em; }
+          .muted { color: #64748b; }
+          table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            margin-top: 3px;
+            border: 1px solid #94a3b8;
+            border-radius: 6px;
+            overflow: hidden;
+          }
+          th, td {
+            border-right: 1px solid #c8d1df;
+            border-bottom: 1px solid #c8d1df;
+            padding: 2px 3px;
+            vertical-align: top;
+          }
+          th:last-child, td:last-child { border-right: 0; }
+          tr:last-child td { border-bottom: 0; }
+          th {
+            background: #e9eff9;
+            color: #0f172a;
+            font-size: 7px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            text-align: center;
+          }
+          td { font-size: 7px; line-height: 1.25; background: #ffffff; }
           .regular-print-table { table-layout: fixed; }
-          .regular-print-table th { text-align: center; }
           .regular-print-table .kelas-col { width: ${kelasWidth}px; }
-          .regular-print-table .kelas-cell { font-weight: 700; width: ${kelasWidth}px; max-width: ${kelasWidth}px; text-align: center; vertical-align: middle; }
+          .regular-print-table .kelas-cell {
+            font-weight: 700;
+            width: ${kelasWidth}px;
+            max-width: ${kelasWidth}px;
+            text-align: center;
+            vertical-align: middle;
+            background: #f7f9fc;
+          }
           .regular-print-table .date-col { width: ${dateWidth}px; white-space: nowrap; }
           .regular-print-table .mapel-col { width: ${mapelWidth}px; max-width: ${mapelWidth}px; word-break: break-word; }
           .regular-print-table .time-col { width: ${timeWidth}px; white-space: nowrap; }
-          .regular-print-table .class-group-start td { border-top-width: 2px; }
+          .regular-print-table .class-group-start td { border-top: 2px solid #64748b; }
           .tambahan-print-table { table-layout: fixed; }
-          .tambahan-print-table .kelas-cell { text-align: center; vertical-align: middle; font-weight: 700; }
+          .tambahan-print-table .kelas-cell {
+            text-align: center;
+            vertical-align: middle;
+            font-weight: 700;
+            background: #f7f9fc;
+          }
           .tambahan-print-table .tambahan-day-col { width: ${tambahanDayWidth}px; }
           .session-item + .session-item { margin-top: 2px; }
-          .session-mapel { font-weight: 700; }
+          .session-mapel { font-weight: 700; color: #0b3b99; }
           .session-pengajar { color: #334155; }
           .session-waktu { color: #0f172a; }
           .cell-empty { color: #64748b; }
           hr { border: 0; border-top: 1px dashed #cbd5e1; margin: 2px 0; }
+          .print-footer-meta {
+            margin-top: 2px;
+            padding-top: 2px;
+            border-top: 1px dashed #cbd5e1;
+            text-align: right;
+            font-size: 6px;
+            color: #64748b;
+          }
           @media print {
             html, body { height: 100%; }
             .print-sheet { height: 100%; }
@@ -539,13 +613,18 @@ export function PrintJadwalView({
         <div className="fw-bold">NEUTRON YOGYAKARTA</div>
         <div className="fw-bold">{titleCabang || "CABANG -"}</div>
       </div>
+      <div className="print-preview-meta mb-2">
+        <span className="badge text-bg-light border">Kelas: {selectedClassGroup.kelas}</span>
+        <span className="badge text-bg-light border">Bulan: {monthOptions.find((item) => item.value === selectedMonthKey)?.label || "-"}</span>
+        <span className="badge text-bg-light border">Orientasi: {printOrientation === "landscape" ? "Landscape" : "Portrait"}</span>
+      </div>
       <div
-        className={`table-responsive border rounded print-preview-shell ${
+        className={`table-responsive border rounded print-preview-shell print-paper-preview ${
           printOrientation === "portrait" ? "print-preview-portrait" : "print-preview-landscape"
         }`}
       >
         {selectedScheduleType === "reguler" ? (
-        <table className="table table-sm table-bordered align-middle mb-0 print-preview-table">
+        <table className="table table-sm table-bordered align-middle mb-0 print-preview-table print-preview-table-modern">
           <colgroup>
             <col className="print-kelas-col" />
             {regularDayColumns.map((day) => (
@@ -634,7 +713,7 @@ export function PrintJadwalView({
           </tbody>
         </table>
         ) : (
-        <table className="table table-sm table-bordered align-middle mb-0 print-preview-table">
+        <table className="table table-sm table-bordered align-middle mb-0 print-preview-table print-preview-table-modern">
           <thead>
             <tr>
               <th className="text-center align-middle print-kelas-col">KELAS</th>
