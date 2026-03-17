@@ -210,6 +210,12 @@ export function App() {
   });
 
   const normalizeText = (value: string) => value.trim().toLowerCase();
+  const buildClassGroupKey = (cabang: string, kelas: string, sekolah = "") =>
+    `${normalizeText(cabang)}||${normalizeText(kelas)}||${normalizeText(sekolah)}`;
+  const parseClassOrder = (value: unknown) => {
+    const numeric = Number(String(value ?? "").trim());
+    return Number.isFinite(numeric) ? numeric : null;
+  };
   const titleCase = (value: string) =>
     value ? `${value.charAt(0).toUpperCase()}${value.slice(1).toLowerCase()}` : value;
   const parseCabangPenempatan = (value: string) => {
@@ -678,9 +684,11 @@ export function App() {
         const waktuFromWaktu = getEntryValue(row, ["Waktu", "Jam"]);
         const waktuMulai = getEntryValue(row, ["Jam Mulai", "Mulai"]);
         const waktuSelesai = getEntryValue(row, ["Jam Selesai", "Selesai"]);
+        const classOrderRaw = getEntryValue(row, ["Urutan Kelas", "Urutan", "Class Order"]);
         const waktu = waktuFromWaktu || [waktuMulai, waktuSelesai].filter(Boolean).join("-");
         const tanggal = normalizeDateValue(tanggalRaw);
         const tanggalSheet = resolveSheetTanggal(tanggalRaw, tanggal);
+        const classOrder = parseClassOrder(classOrderRaw);
 
         if (!cabang && !kelas && !sekolah && !tanggal && !mapel && !pengajar && !waktu) {
           return acc;
@@ -696,6 +704,7 @@ export function App() {
           mapel,
           pengajar,
           waktu,
+          classOrder: classOrder === null ? "" : String(classOrder),
           catatan: "",
         });
 
@@ -751,6 +760,7 @@ export function App() {
             mapel,
             pengajar,
             waktu,
+            classOrder: "",
             catatan: "",
           });
         });
@@ -863,27 +873,38 @@ export function App() {
   const hasScheduleContent = (entry?: RecordItem) =>
     Boolean(entry && ((entry.mapel || "").trim() || (entry.pengajar || "").trim() || (entry.waktu || "").trim()));
 
-  const monthScheduleGroups = useMemo(() => {
-    const sourceRecords = records[activeScheduleKey] ?? [];
-    const entries =
-      selectedScheduleCabang
-        ? sourceRecords.filter(
-            (entry) => normalizeText(entry.cabang || "") === normalizeText(selectedScheduleCabang)
-          )
-        : sourceRecords;
+  const buildScheduleGroups = (
+    sourceRecords: RecordItem[],
+    cabangFilter: string,
+    searchText: string
+  ) => {
+    const entries = cabangFilter
+      ? sourceRecords.filter(
+          (entry) => normalizeText(entry.cabang || "") === normalizeText(cabangFilter)
+        )
+      : sourceRecords;
     const grouped = new Map<
       string,
-      { cabang: string; kelas: string; sekolah: string; entriesByDate: Record<string, RecordItem[]> }
+      { cabang: string; kelas: string; sekolah: string; classOrder: number; entriesByDate: Record<string, RecordItem[]> }
     >();
+    let fallbackOrder = 1;
 
     entries.forEach((entry) => {
       const cabang = entry.cabang || "-";
       const kelas = entry.kelas || "-";
       const sekolah = entry.sekolah || "";
-      const key = `${cabang}||${kelas}||${sekolah}`;
+      const key = buildClassGroupKey(cabang, kelas, sekolah);
+      const parsedOrder = parseClassOrder(entry.classOrder);
+      const initialOrder = parsedOrder ?? fallbackOrder;
+
       if (!grouped.has(key)) {
-        grouped.set(key, { cabang, kelas, sekolah, entriesByDate: {} });
+        grouped.set(key, { cabang, kelas, sekolah, classOrder: initialOrder, entriesByDate: {} });
+        fallbackOrder += 1;
+      } else if (parsedOrder !== null) {
+        const currentOrder = grouped.get(key)?.classOrder ?? parsedOrder;
+        grouped.get(key)!.classOrder = Math.min(currentOrder, parsedOrder);
       }
+
       if (!hasScheduleContent(entry)) {
         return;
       }
@@ -901,11 +922,18 @@ export function App() {
       });
     });
 
-    const groups = Array.from(grouped.values());
-    if (!query.trim()) {
+    const groups = Array.from(grouped.values()).sort((a, b) => {
+      if (a.classOrder !== b.classOrder) {
+        return a.classOrder - b.classOrder;
+      }
+      return a.kelas.localeCompare(b.kelas, "id");
+    });
+
+    if (!searchText.trim()) {
       return groups;
     }
-    const lowered = query.toLowerCase();
+
+    const lowered = searchText.toLowerCase();
     return groups.filter((group) => {
       if (
         group.cabang.toLowerCase().includes(lowered) ||
@@ -922,48 +950,19 @@ export function App() {
         )
       );
     });
+  };
+
+  const monthScheduleGroupsAll = useMemo(
+    () => buildScheduleGroups(records[activeScheduleKey] ?? [], selectedScheduleCabang, ""),
+    [activeScheduleKey, records, selectedScheduleCabang]
+  );
+
+  const monthScheduleGroups = useMemo(() => {
+    return buildScheduleGroups(records[activeScheduleKey] ?? [], selectedScheduleCabang, query);
   }, [activeScheduleKey, query, records, selectedScheduleCabang]);
 
   const tambahanPrintGroups = useMemo(() => {
-    const sourceRecords = records.jadwalTambahanPelayanan ?? [];
-    const entries =
-      restrictedCabang
-        ? sourceRecords.filter(
-            (entry) => normalizeText(entry.cabang || "") === normalizeText(restrictedCabang)
-          )
-        : sourceRecords;
-
-    const grouped = new Map<
-      string,
-      { cabang: string; kelas: string; sekolah: string; entriesByDate: Record<string, RecordItem[]> }
-    >();
-
-    entries.forEach((entry) => {
-      const cabang = entry.cabang || "-";
-      const kelas = entry.kelas || "-";
-      const sekolah = entry.sekolah || "";
-      const key = `${cabang}||${kelas}||${sekolah}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, { cabang, kelas, sekolah, entriesByDate: {} });
-      }
-      if (!hasScheduleContent(entry)) {
-        return;
-      }
-      const existingEntries = grouped.get(key)!.entriesByDate[entry.tanggal] ?? [];
-      grouped.get(key)!.entriesByDate[entry.tanggal] = [...existingEntries, entry];
-    });
-
-    grouped.forEach((group) => {
-      Object.keys(group.entriesByDate).forEach((dateKey) => {
-        group.entriesByDate[dateKey] = [...group.entriesByDate[dateKey]].sort((a, b) => {
-          const aStart = parseRangeFromString(a.waktu || "")?.start ?? Number.MAX_SAFE_INTEGER;
-          const bStart = parseRangeFromString(b.waktu || "")?.start ?? Number.MAX_SAFE_INTEGER;
-          return aStart - bStart;
-        });
-      });
-    });
-
-    return Array.from(grouped.values());
+    return buildScheduleGroups(records.jadwalTambahanPelayanan ?? [], restrictedCabang, "");
   }, [records.jadwalTambahanPelayanan, restrictedCabang]);
 
   const allScheduleEntries = useMemo(
@@ -2544,7 +2543,8 @@ export function App() {
           item.mapel || "",
           item.pengajar || "",
           item.waktu || "",
-          group.sekolah || ""
+          group.sekolah || "",
+          item.classOrder || ""
         );
         const newRecord = buildSheetRecord(
           cabang,
@@ -2553,7 +2553,8 @@ export function App() {
           item.mapel || "",
           item.pengajar || "",
           item.waktu || "",
-          sekolah
+          sekolah,
+          item.classOrder || ""
         );
         return postToSheet({ action: "upsert", record: newRecord, oldRecord });
       })
@@ -2597,12 +2598,27 @@ export function App() {
       setClassError("Tanggal jadwal belum tersedia.");
       return;
     }
-    const sheetRecord = buildSheetRecord(cabang, kelas, firstSlot.label, "", "", "", sekolah);
+    const classOrders = (records[activeScheduleKey] ?? [])
+      .filter((item) => normalizeText(item.cabang || "") === normalizeText(cabang))
+      .map((item) => parseClassOrder(item.classOrder))
+      .filter((value): value is number => value !== null);
+    const nextClassOrder = (classOrders.length > 0 ? Math.max(...classOrders) : 0) + 1;
+    const sheetRecord = buildSheetRecord(
+      cabang,
+      kelas,
+      firstSlot.label,
+      "",
+      "",
+      "",
+      sekolah,
+      String(nextClassOrder)
+    );
     const newItem: RecordItem = {
       id: `kelas-${Date.now()}-${Math.round(Math.random() * 1000)}`,
       cabang,
       kelas,
       sekolah,
+      classOrder: String(nextClassOrder),
       tanggal: firstSlot.date,
       tanggalSheet: sheetRecord.Tanggal,
       mapel: "",
@@ -2663,6 +2679,72 @@ export function App() {
     );
   };
 
+  const handleMoveClass = async (group: { cabang: string; kelas: string; sekolah: string }, direction: -1 | 1) => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat mengatur urutan kelas.", "error");
+      return;
+    }
+
+    const key = buildClassGroupKey(group.cabang, group.kelas, group.sekolah || "");
+    const currentIndex = monthScheduleGroupsAll.findIndex(
+      (item) => buildClassGroupKey(item.cabang, item.kelas, item.sekolah || "") === key
+    );
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= monthScheduleGroupsAll.length) {
+      return;
+    }
+
+    const currentGroup = monthScheduleGroupsAll[currentIndex];
+    const targetGroup = monthScheduleGroupsAll[nextIndex];
+    const currentOrder = currentGroup.classOrder;
+    const targetOrder = targetGroup.classOrder;
+
+    const currentKey = buildClassGroupKey(currentGroup.cabang, currentGroup.kelas, currentGroup.sekolah || "");
+    const targetKey = buildClassGroupKey(targetGroup.cabang, targetGroup.kelas, targetGroup.sekolah || "");
+
+    setRecords((prev) => ({
+      ...prev,
+      [activeScheduleKey]: (prev[activeScheduleKey] ?? []).map((item) => {
+        const itemKey = buildClassGroupKey(item.cabang || "", item.kelas || "", item.sekolah || "");
+        if (itemKey === currentKey) {
+          return { ...item, classOrder: String(targetOrder) };
+        }
+        if (itemKey === targetKey) {
+          return { ...item, classOrder: String(currentOrder) };
+        }
+        return item;
+      }),
+    }));
+
+    await Promise.all([
+      postToSheet(
+        {
+          action: "reorderClass",
+          cabang: currentGroup.cabang,
+          kelas: currentGroup.kelas,
+          sekolah: currentGroup.sekolah || "",
+          classOrder: String(targetOrder),
+        },
+        activeScheduleKey
+      ),
+      postToSheet(
+        {
+          action: "reorderClass",
+          cabang: targetGroup.cabang,
+          kelas: targetGroup.kelas,
+          sekolah: targetGroup.sekolah || "",
+          classOrder: String(currentOrder),
+        },
+        activeScheduleKey
+      ),
+    ]);
+    pushToast("Urutan kelas berhasil diperbarui.", "success");
+  };
+
   const buildSheetRecord = (
     cabang: string,
     kelas: string,
@@ -2670,11 +2752,13 @@ export function App() {
     mapel: string,
     pengajar: string,
     waktu: string,
-    sekolah = ""
+    sekolah = "",
+    classOrder = ""
   ) => ({
     Cabang: cabang,
     Kelas: kelas,
     ...(sekolah ? { Sekolah: sekolah } : {}),
+    ...(String(classOrder).trim() ? { "Urutan Kelas": String(classOrder).trim() } : {}),
     Tanggal: formatSheetTanggal(tanggalSheet),
     Mapel: mapel,
     Pengajar: pengajar,
@@ -2868,6 +2952,15 @@ export function App() {
     const existingEntry = entryId
       ? (records[activeScheduleKey] ?? []).find((item) => item.id === entryId)
       : undefined;
+    const classOrderValue =
+      existingEntry?.classOrder ||
+      (records[activeScheduleKey] ?? []).find(
+        (item) =>
+          item.cabang === cabang &&
+          item.kelas === kelas &&
+          (item.sekolah || "") === sekolahValue
+      )?.classOrder ||
+      "";
 
     const sheetRecord = buildSheetRecord(
       cabang,
@@ -2876,7 +2969,8 @@ export function App() {
       nextValues.mapel,
       nextValues.pengajar,
       nextValues.waktu,
-      sekolahValue
+      sekolahValue,
+      classOrderValue
     );
 
     const oldSheetRecord = existingEntry
@@ -2887,7 +2981,8 @@ export function App() {
           existingEntry.mapel || "",
           existingEntry.pengajar || "",
           existingEntry.waktu || "",
-          existingEntry.sekolah || sekolahValue
+          existingEntry.sekolah || sekolahValue,
+          existingEntry.classOrder || classOrderValue
         )
       : null;
 
@@ -2904,6 +2999,7 @@ export function App() {
                   cabang,
                   kelas,
                   sekolah: sekolahValue,
+                  classOrder: classOrderValue,
                   tanggal,
                   tanggalSheet: sheetRecord.Tanggal,
                 }
@@ -2919,6 +3015,7 @@ export function App() {
         cabang,
         kelas,
         sekolah: sekolahValue,
+        classOrder: classOrderValue,
         tanggal,
         tanggalSheet: sheetRecord.Tanggal,
         ...nextValues,
@@ -2957,7 +3054,8 @@ export function App() {
       existingEntry?.mapel || "",
       existingEntry?.pengajar || "",
       existingEntry?.waktu || "",
-      existingEntry?.sekolah || editingSlot.sekolah || ""
+      existingEntry?.sekolah || editingSlot.sekolah || "",
+      existingEntry?.classOrder || ""
     );
     setRecords((prev) => ({
       ...prev,
@@ -3170,6 +3268,7 @@ export function App() {
                     saving={sheetStatus.saving}
                     onInlineSaveClass={handleInlineSaveClass}
                     onDeleteClass={handleDeleteClass}
+                    onMoveClass={handleMoveClass}
                     onSelectSlot={handleSelectBulanIniSlot}
                     onOpenClassModal={handleOpenClassModal}
                   />

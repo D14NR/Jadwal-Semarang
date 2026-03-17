@@ -14,6 +14,7 @@ type ScheduleTableViewProps = {
   saving: boolean;
   onInlineSaveClass: (group: ScheduleGroup, kelas: string, sekolah: string) => Promise<boolean>;
   onDeleteClass: (group: ScheduleGroup) => void;
+  onMoveClass: (group: ScheduleGroup, direction: -1 | 1) => void;
   onSelectSlot: (group: ScheduleGroup, slot: ScheduleSlotDate, item?: RecordItem) => void;
   onOpenClassModal: () => void;
 };
@@ -29,6 +30,7 @@ export function ScheduleTableView({
   saving,
   onInlineSaveClass,
   onDeleteClass,
+  onMoveClass,
   onSelectSlot,
   onOpenClassModal,
 }: ScheduleTableViewProps) {
@@ -106,23 +108,51 @@ export function ScheduleTableView({
                 </td>
               </tr>
             ) : (
-              monthScheduleGroups.map((group) => (
+              monthScheduleGroups.map((group, groupIndex) => (
                 <tr key={`${group.cabang}-${group.kelas}-${group.sekolah || ""}`}>
                   <td className="text-center col-aksi sticky-col-aksi">
                     {readOnly ? (
                       <span className="text-muted">-</span>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onDeleteClass(group);
-                        }}
-                        className="btn btn-outline-danger btn-sm btn-icon"
-                        aria-label="Hapus kelas"
-                      >
-                        <i className="bi bi-trash" />
-                      </button>
+                      <div className="d-flex flex-column align-items-center justify-content-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onMoveClass(group, -1);
+                          }}
+                          className="btn btn-outline-secondary btn-sm btn-icon"
+                          aria-label="Geser kelas ke atas"
+                          disabled={saving || groupIndex === 0}
+                        >
+                          <i className="bi bi-chevron-up" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onMoveClass(group, 1);
+                          }}
+                          className="btn btn-outline-secondary btn-sm btn-icon"
+                          aria-label="Geser kelas ke bawah"
+                          disabled={
+                            saving || groupIndex === monthScheduleGroups.length - 1
+                          }
+                        >
+                          <i className="bi bi-chevron-down" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteClass(group);
+                          }}
+                          className="btn btn-outline-danger btn-sm btn-icon"
+                          aria-label="Hapus kelas"
+                        >
+                          <i className="bi bi-trash" />
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td className="fw-semibold col-kelas sticky-col-kelas">
@@ -301,7 +331,7 @@ export function ScheduleTableView({
       <div className="alert alert-info mt-3 text-xs mb-0">
         {readOnly
           ? "Mode lihat cabang lain aktif. Anda hanya dapat melihat jadwal tanpa mengubah data."
-          : "Klik salah satu sel pada tabel jadwal untuk menambah atau mengedit data."}
+          : "Klik sel untuk edit jadwal. Gunakan ikon panah di kolom aksi untuk menggeser urutan kelas."}
       </div>
     </>
   );

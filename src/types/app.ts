@@ -59,6 +59,7 @@ export type ScheduleGroup = {
   cabang: string;
   kelas: string;
   sekolah: string;
+  classOrder: number;
   entriesByDate: Record<string, RecordItem[]>;
 };
 

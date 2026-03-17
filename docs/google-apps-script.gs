@@ -13,7 +13,7 @@ const REQUIRED_COLUMNS = [
   "Waktu",
 ];
 
-const OPTIONAL_SCHEDULE_COLUMNS = ["Sekolah"];
+const OPTIONAL_SCHEDULE_COLUMNS = ["Sekolah", "Urutan Kelas"];
 
 const SURAT_TUGAS_HEADERS = [
   "Kode Pengajar",
@@ -794,6 +794,33 @@ function doPost(e) {
       });
 
       return buildResponse({ success: true, message: "Kelas berhasil dihapus." });
+    }
+
+    if (action === "reorderClass") {
+      const targetCabang = normalizeText(payload.cabang || record.Cabang);
+      const targetKelas = normalizeText(payload.kelas || record.Kelas);
+      const targetSekolah = normalizeText(payload.sekolah || record.Sekolah);
+      const nextOrder = normalizeText(payload.classOrder || record["Urutan Kelas"]);
+      if (!targetCabang || !targetKelas) {
+        throw new Error("Cabang dan kelas wajib diisi untuk mengatur urutan.");
+      }
+      const orderIndex = headerMap[normalizeHeader("Urutan Kelas")];
+      const cabangIndex = headerMap[normalizeHeader("Cabang")];
+      const kelasIndex = headerMap[normalizeHeader("Kelas")];
+      const sekolahIndex = headerMap[normalizeHeader("Sekolah")];
+      const values = sheet.getDataRange().getValues();
+      for (let rowIndex = 1; rowIndex < values.length; rowIndex += 1) {
+        const row = values[rowIndex];
+        const cabangValue = normalizeText(row[cabangIndex]);
+        const kelasValue = normalizeText(row[kelasIndex]);
+        const sekolahValue = sekolahIndex === undefined ? "" : normalizeText(row[sekolahIndex]);
+        const sekolahMatches = targetSekolah ? sekolahValue === targetSekolah : true;
+        if (cabangValue === targetCabang && kelasValue === targetKelas && sekolahMatches) {
+          values[rowIndex][orderIndex] = nextOrder;
+        }
+      }
+      sheet.getRange(1, 1, values.length, headers.length).setValues(values);
+      return buildResponse({ success: true, message: "Urutan kelas diperbarui." });
     }
 
     if (action === "append") {
