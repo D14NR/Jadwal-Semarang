@@ -15,6 +15,7 @@ import {
   type PermintaanDraft,
 } from "./components/modals/PermintaanPengajarModal";
 import { TopToolbar } from "./components/views/TopToolbar";
+import { DashboardView } from "./components/views/DashboardView";
 import { ScheduleTableView } from "./components/views/ScheduleTableView";
 import { MonitoringKelasView } from "./components/views/MonitoringKelasView";
 import { MapelTableView } from "./components/views/MapelTableView";
@@ -1247,6 +1248,59 @@ export function App() {
       Object.values(record).some((value) => String(value).toLowerCase().includes(lowered))
     );
   }, [permintaanRecords, query, restrictedCabang]);
+
+  const dashboardPendingRequests = useMemo(() => {
+    return filteredPermintaanRecords
+      .filter((record) => normalizeText(record.Status || "") === "menunggu")
+      .map((record) => ({
+        id: record.ID || `${record["Kode Pengajar"] || ""}-${record["Cabang Peminta"] || ""}`,
+        kodePengajar: record["Kode Pengajar"] || "",
+        namaPengajar: record["Nama Pengajar"] || "",
+        cabangPeminta: record["Cabang Peminta"] || "",
+        cabangDomisili: record["Cabang Domisili"] || "",
+        status: record.Status || "Menunggu",
+      }));
+  }, [filteredPermintaanRecords]);
+
+  const dashboardTodaySchedules = useMemo(() => {
+    const todayKey = formatLocalDate(new Date());
+    const scheduleItems: Array<RecordItem & { sourceLabel: string }> = [
+      ...(records.bulanIni ?? []).map((item) => ({ ...item, sourceLabel: "Jadwal Reguler" })),
+      ...(records.jadwalTambahanPelayanan ?? []).map((item) => ({ ...item, sourceLabel: "Jadwal Tambahan & Pelayanan" })),
+    ];
+
+    return scheduleItems
+      .filter((item) => {
+        const parsedDate = parseFlexibleDate(item["tanggalSheet"] || item["tanggal"] || "");
+        if (!parsedDate) {
+          return false;
+        }
+        if (formatLocalDate(parsedDate) !== todayKey) {
+          return false;
+        }
+        if (!(item["mapel"] || "").trim() && !(item["pengajar"] || "").trim() && !(item["waktu"] || "").trim()) {
+          return false;
+        }
+        if (restrictedCabang && normalizeText(item["cabang"] || "") !== normalizeText(restrictedCabang)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const aStart = parseRangeFromString(a["waktu"] || "")?.start ?? Number.MAX_SAFE_INTEGER;
+        const bStart = parseRangeFromString(b["waktu"] || "")?.start ?? Number.MAX_SAFE_INTEGER;
+        return aStart - bStart;
+      })
+      .map((item, index) => ({
+        id: item.id || `${item.sourceLabel}-${index}`,
+        waktu: item["waktu"] || "",
+        mapel: item["mapel"] || "",
+        pengajar: item["pengajar"] || "",
+        kelas: [item["kelas"] || "", item["sekolah"] || ""].filter(Boolean).join("\n"),
+        cabang: item["cabang"] || "",
+        sourceLabel: item.sourceLabel,
+      }));
+  }, [records.bulanIni, records.jadwalTambahanPelayanan, restrictedCabang]);
 
   const suratTugasRecordsByMonth = useMemo(() => {
     if (!selectedSuratTugasMonthKey) {
@@ -3220,10 +3274,16 @@ export function App() {
                 {(activeKey === "bulanIni" ||
                   activeKey === "jadwalTambahanPelayanan" ||
                   activeKey === "monitoringKelas" ||
-                  activeKey === "printJadwal") &&
+                  activeKey === "printJadwal" ||
+                  activeKey === "dashboard") &&
                   sheetStatus.error && (
                   <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
                     {sheetStatus.error}
+                  </div>
+                )}
+                {activeKey === "dashboard" && permintaanStatus.error && (
+                  <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
+                    {permintaanStatus.error}
                   </div>
                 )}
                 {activeKey === "mataPelajaran" && mapelStatus.error && (
@@ -3256,7 +3316,13 @@ export function App() {
                   </div>
                 )}
 
-                {activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan" ? (
+                {activeKey === "dashboard" ? (
+                  <DashboardView
+                    loading={sheetStatus.loading || permintaanStatus.loading}
+                    pendingRequests={dashboardPendingRequests}
+                    todaySchedules={dashboardTodaySchedules}
+                  />
+                ) : activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan" ? (
                   <ScheduleTableView
                     isJadwalTambahanMenu={isJadwalTambahanMenu}
                     readOnly={isScheduleReadOnly}
