@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import { categories, initialRecords } from "./config/categories";
 import { SidebarMenu } from "./components/layout/SidebarMenu";
 import { LoginScreen } from "./components/layout/LoginScreen";
@@ -36,13 +37,11 @@ import type {
   ToastType,
 } from "./types/app";
 import {
-  appsScriptUrl,
   buildRollingScheduleDates,
   buildMonthScheduleDates,
   formatLocalDate,
   formatScheduleLabel,
   formatTimeHHMM,
-  mainSpreadsheetId,
   mapelHeadersExpected,
   mapMapelRecord,
   normalizeHeader,
@@ -50,6 +49,14 @@ import {
   parseRangeFromString,
   parseTimeValue,
 } from "./utils/schedule";
+import {
+  deleteRowsByIds,
+  insertRow,
+  listRows,
+  replaceBucketRows,
+  updateRow,
+  type DbRow,
+} from "./lib/database";
 
 export function App() {
   const scheduleSheetByKey = {
@@ -57,6 +64,23 @@ export function App() {
     jadwalTambahanPelayanan: "Jadwal Khusus",
   } as const;
   type ScheduleMenuKey = keyof typeof scheduleSheetByKey;
+  const dataBucket = {
+    "Jadwal Bulan ini": "jadwal_reguler",
+    "Jadwal Khusus": "jadwal_khusus",
+    "Mata Pelajaran": "mata_pelajaran",
+    "Data Pengajar": "pengajar",
+    "Surat Tugas Pengajar": "surat_tugas",
+    "Penempatan Pengajar": "penempatan_pengajar",
+    "Permintaan Pengajar Antar Cabang": "permintaan_pengajar",
+  } as const;
+
+  const toRecord = (row: DbRow) => row.data;
+  const normalizeValueKey = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const matchByFields = (
+    source: Record<string, string>,
+    target: Record<string, string>,
+    fields: string[]
+  ) => fields.every((field) => normalizeValueKey(source[field]) === normalizeValueKey(target[field]));
 
   const [activeKey, setActiveKey] = useState(categories[0].key);
   const [records, setRecords] = useState<Record<string, RecordItem[]>>(initialRecords);
@@ -194,6 +218,8 @@ export function App() {
   const [loginError, setLoginError] = useState("");
   const [toasts, setToasts] = useState<AppToast[]>([]);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     title: string;
@@ -808,63 +834,6 @@ export function App() {
     return [];
   };
 
-  const parseGenericSheet = (payload: unknown) => {
-    if (payload && typeof payload === "object") {
-      const recordPayload = payload as {
-        success?: boolean;
-        message?: string;
-        data?: Record<string, unknown>[];
-        records?: Record<string, unknown>[];
-        values?: unknown[][];
-        headers?: string[];
-      };
-      if (recordPayload.success === false) {
-        throw new Error(recordPayload.message || "Gagal memuat data dari Apps Script.");
-      }
-      if (Array.isArray(recordPayload.data) || Array.isArray(recordPayload.records)) {
-        const rows = (recordPayload.data || recordPayload.records || []) as Record<string, unknown>[];
-        const headers =
-          recordPayload.headers && recordPayload.headers.length > 0
-            ? recordPayload.headers
-            : Object.keys(rows[0] || {});
-        const records = rows.map((row) => {
-          const normalized: Record<string, string> = {};
-          headers.forEach((header) => {
-            const value = row[header];
-            normalized[header] = value === undefined || value === null ? "" : String(value);
-          });
-          return normalized;
-        });
-        return { headers, records };
-      }
-      if (Array.isArray(recordPayload.values)) {
-        const headerRow = recordPayload.values[0]?.map((value) => String(value ?? "")) ?? [];
-        const records = recordPayload.values.slice(1).map((row) => {
-          const normalized: Record<string, string> = {};
-          headerRow.forEach((header, index) => {
-            normalized[header] = row?.[index] === undefined ? "" : String(row?.[index] ?? "");
-          });
-          return normalized;
-        });
-        return { headers: headerRow, records };
-      }
-    }
-
-    if (Array.isArray(payload) && payload.length > 0 && Array.isArray(payload[0])) {
-      const headerRow = (payload[0] as unknown[]).map((value) => String(value ?? ""));
-      const records = (payload as unknown[][]).slice(1).map((row) => {
-        const normalized: Record<string, string> = {};
-        headerRow.forEach((header, index) => {
-          normalized[header] = row?.[index] === undefined ? "" : String(row?.[index] ?? "");
-        });
-        return normalized;
-      });
-      return { headers: headerRow, records };
-    }
-
-    return { headers: [], records: [] };
-  };
-
   const activeConfig = useMemo(
     () => categories.find((category) => category.key === activeKey) ?? categories[0],
     [activeKey]
@@ -973,6 +942,57 @@ export function App() {
     ],
     [records]
   );
+
+  const conflictingScheduleEntryIds = useMemo(() => {
+    const groupedByPengajarTanggal = new Map<string, RecordItem[]>();
+
+    allScheduleEntries.forEach((entry) => {
+      if (!hasScheduleContent(entry)) {
+        return;
+      }
+      const pengajarKey = normalizeText(entry.pengajar || "");
+      const tanggalKey = (entry.tanggal || "").trim();
+      if (!pengajarKey || !tanggalKey) {
+        return;
+      }
+      const groupKey = `${pengajarKey}||${tanggalKey}`;
+      const existing = groupedByPengajarTanggal.get(groupKey) ?? [];
+      groupedByPengajarTanggal.set(groupKey, [...existing, entry]);
+    });
+
+    const conflictIds = new Set<string>();
+
+    groupedByPengajarTanggal.forEach((entries) => {
+      for (let i = 0; i < entries.length; i += 1) {
+        const current = entries[i];
+        const currentRange = parseRangeFromString(current.waktu || "");
+        if (!currentRange) {
+          continue;
+        }
+        for (let j = i + 1; j < entries.length; j += 1) {
+          const target = entries[j];
+          const currentCabang = normalizeText(current.cabang || "");
+          const targetCabang = normalizeText(target.cabang || "");
+          if (!currentCabang || !targetCabang || currentCabang === targetCabang) {
+            continue;
+          }
+
+          const targetRange = parseRangeFromString(target.waktu || "");
+          if (!targetRange) {
+            continue;
+          }
+
+          const isOverlap = currentRange.start < targetRange.end && targetRange.start < currentRange.end;
+          if (isOverlap) {
+            conflictIds.add(current.id);
+            conflictIds.add(target.id);
+          }
+        }
+      }
+    });
+
+    return conflictIds;
+  }, [allScheduleEntries]);
 
   const getApprovedPermintaanForCabang = (
     kodePengajar: string,
@@ -1422,14 +1442,27 @@ export function App() {
     setSheetStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
       const targetSheet = scheduleSheetByKey[scheduleKey];
-      const response = await fetch(
-        `${appsScriptUrl}?sheet=${encodeURIComponent(targetSheet)}&spreadsheetId=${encodeURIComponent(mainSpreadsheetId)}`
-      );
-      if (!response.ok) {
-        throw new Error("Gagal memuat Apps Script.");
-      }
-      const payload = await response.json();
-      const parsedRecords = parseAppsScriptRecords(payload);
+      const bucket = dataBucket[targetSheet];
+      const rows = await listRows(bucket);
+      const parsedRecords = rows.map((row, index) => {
+        const item = parseAppsScriptRecords([toRecord(row)])[0];
+        return {
+          ...(item || {
+            id: `${bucket}-${index}-${Date.now()}`,
+            cabang: "",
+            kelas: "",
+            sekolah: "",
+            tanggal: "",
+            tanggalSheet: "",
+            mapel: "",
+            pengajar: "",
+            waktu: "",
+            classOrder: "",
+            catatan: "",
+          }),
+          id: row.id,
+        } as RecordItem;
+      });
       setRecords((prev) => ({
         ...prev,
         [scheduleKey]: parsedRecords,
@@ -1449,7 +1482,7 @@ export function App() {
         ...prev,
         loading: false,
         saving: false,
-        error: "Gagal memuat data dari Apps Script. Periksa hak akses atau format kolom.",
+        error: "Gagal memuat data dari database Supabase.",
       }));
       pushToast("Gagal memuat data jadwal dari database.", "error");
     }
@@ -1458,14 +1491,8 @@ export function App() {
   const handleLoadMapel = async () => {
     setMapelStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const response = await fetch(
-        `${appsScriptUrl}?sheet=${encodeURIComponent("Mata Pelajaran")}&spreadsheetId=${encodeURIComponent(mainSpreadsheetId)}`
-      );
-      if (!response.ok) {
-        throw new Error("Gagal memuat Apps Script.");
-      }
-      const payload = await response.json();
-      const { records: parsed } = parseGenericSheet(payload);
+      const rows = await listRows(dataBucket["Mata Pelajaran"]);
+      const parsed = rows.map((row) => toRecord(row));
       const normalized = parsed.map((row) => mapMapelRecord(row));
       setMapelHeaders(mapelHeadersExpected);
       setMapelRecords(normalized);
@@ -1478,7 +1505,7 @@ export function App() {
       setMapelStatus((prev) => ({
         ...prev,
         loading: false,
-        error: "Gagal memuat data mata pelajaran dari Apps Script.",
+        error: "Gagal memuat data mata pelajaran dari database.",
       }));
       pushToast("Gagal memuat data mata pelajaran.", "error");
     }
@@ -1506,21 +1533,18 @@ export function App() {
 
     setMapelStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const payload = {
-        action: "saveMapel",
-        sheetName: "Mata Pelajaran",
-        oldMapel: editingMapelOldName,
-        record: {
-          Mapel: mapel,
-          Kode_Mapel: kode
-        }
-      };
-
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify(payload),
+      const bucket = dataBucket["Mata Pelajaran"];
+      const rows = await listRows(bucket);
+      const existing = rows.find((row) => {
+        const value = row.data.Mapel || "";
+        return normalizeValueKey(value) === normalizeValueKey(editingMapelOldName || mapel);
       });
+
+      if (existing) {
+        await updateRow(existing.id, { Mapel: mapel, Kode_Mapel: kode });
+      } else {
+        await insertRow(bucket, { Mapel: mapel, Kode_Mapel: kode });
+      }
 
       setIsMapelModalOpen(false);
       handleLoadMapel();
@@ -1541,19 +1565,11 @@ export function App() {
       async () => {
         setMapelStatus((prev) => ({ ...prev, loading: true, error: "" }));
         try {
-          const payload = {
-            action: "deleteMapel",
-            sheetName: "Mata Pelajaran",
-            record: {
-              Mapel: record.Mapel
-            }
-          };
-
-          await fetch(appsScriptUrl, {
-            method: "POST",
-            mode: "no-cors",
-            body: JSON.stringify(payload),
-          });
+          const rows = await listRows(dataBucket["Mata Pelajaran"]);
+          const targetIds = rows
+            .filter((row) => normalizeValueKey(row.data.Mapel) === normalizeValueKey(record.Mapel))
+            .map((row) => row.id);
+          await deleteRowsByIds(targetIds);
 
           handleLoadMapel();
           pushToast("Data mata pelajaran berhasil dihapus.", "success");
@@ -1573,13 +1589,8 @@ export function App() {
   const handleLoadPengajar = async () => {
     setPengajarStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const targetUrl = `${appsScriptUrl}?sheet=${encodeURIComponent("Data Pengajar")}&spreadsheetId=${encodeURIComponent(mainSpreadsheetId)}`;
-      const response = await fetch(targetUrl);
-      if (!response.ok) {
-        throw new Error("Gagal memuat data pengajar.");
-      }
-      const data = await response.json();
-      const parsed = parseGenericSheet(data);
+      const rows = await listRows(dataBucket["Data Pengajar"]);
+      const parsed = { records: rows.map((row) => toRecord(row)) };
       
       const expectedHeaders = ["Kode Pengajar", "Nama", "Bidang Studi", "Email", "No.WhatsApp", "Domisili", "Username", "Password"];
       
@@ -1645,7 +1656,11 @@ export function App() {
   };
 
   const handlePengajarDraftChange = (field: keyof PengajarDraft, value: string) => {
-    if (field === "Kode Pengajar" || field === "Domisili" || field === "Username") {
+    if (field === "Kode Pengajar" || field === "Username") {
+      return;
+    }
+
+    if (field === "Domisili" && restrictedCabang) {
       return;
     }
 
@@ -1693,13 +1708,8 @@ export function App() {
   const handleLoadSuratTugas = async () => {
     setSuratTugasStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const targetUrl = `${appsScriptUrl}?sheet=${encodeURIComponent("Surat Tugas Pengajar")}&spreadsheetId=${encodeURIComponent(mainSpreadsheetId)}`;
-      const response = await fetch(targetUrl);
-      if (!response.ok) {
-        throw new Error("Gagal memuat Surat Tugas Mengajar.");
-      }
-      const data = await response.json();
-      const parsed = parseGenericSheet(data);
+      const rows = await listRows(dataBucket["Surat Tugas Pengajar"]);
+      const parsed = { records: rows.map((row) => toRecord(row)) };
       
       const expectedHeaders = ["Kode Pengajar", "Tanggal", "Sesi 1", "Sesi 2", "Sesi 3", "Sesi 4", "Sesi 5", "Sesi 6", "Sesi 7", "Sesi 8", "Sesi 9", "Sesi 10"];
 
@@ -1768,20 +1778,18 @@ export function App() {
 
     setPengajarStatus((prev) => ({ ...prev, loading: true }));
     try {
-      const payload = {
-        action: "savePengajar",
-        sheetName: "Data Pengajar",
-        spreadsheetId: mainSpreadsheetId,
-        oldKode: editingPengajarOldKode,
-        record: normalizedRecord,
-      };
-
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const bucket = dataBucket["Data Pengajar"];
+      const rows = await listRows(bucket);
+      const existing = rows.find(
+        (row) =>
+          normalizeValueKey(row.data["Kode Pengajar"]) ===
+          normalizeValueKey(editingPengajarOldKode || normalizedRecord["Kode Pengajar"])
+      );
+      if (existing) {
+        await updateRow(existing.id, normalizedRecord);
+      } else {
+        await insertRow(bucket, normalizedRecord);
+      }
 
       setIsPengajarModalOpen(false);
       handleLoadPengajar();
@@ -1802,19 +1810,15 @@ export function App() {
       async () => {
         setPengajarStatus((prev) => ({ ...prev, loading: true }));
         try {
-          const payload = {
-            action: "deletePengajar",
-            sheetName: "Data Pengajar",
-            spreadsheetId: mainSpreadsheetId,
-            record: record,
-          };
-
-          await fetch(appsScriptUrl, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
+          const rows = await listRows(dataBucket["Data Pengajar"]);
+          const targetIds = rows
+            .filter(
+              (row) =>
+                normalizeValueKey(row.data["Kode Pengajar"]) ===
+                normalizeValueKey(record["Kode Pengajar"])
+            )
+            .map((row) => row.id);
+          await deleteRowsByIds(targetIds);
 
           handleLoadPengajar();
           pushToast("Data pengajar berhasil dihapus.", "success");
@@ -1849,15 +1853,9 @@ export function App() {
   const handleLoadPenempatanPengajar = async () => {
     setPenempatanStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const response = await fetch(
-        `${appsScriptUrl}?sheet=${encodeURIComponent("Penempatan Pengajar")}&spreadsheetId=${encodeURIComponent(mainSpreadsheetId)}`
-      );
-      if (!response.ok) {
-        throw new Error("Gagal memuat data penempatan pengajar.");
-      }
-      const payload = await response.json();
-      const parsed = parseGenericSheet(payload);
-      const normalized = parsed.records
+      const rows = await listRows(dataBucket["Penempatan Pengajar"]);
+      const normalized = rows
+        .map((row) => toRecord(row))
         .map((record) => normalizePenempatanRecord(record))
         .filter((record) =>
           restrictedCabang
@@ -1874,7 +1872,7 @@ export function App() {
       setPenempatanStatus((prev) => ({
         ...prev,
         loading: false,
-        error: "Gagal memuat data penempatan pengajar dari Apps Script.",
+        error: "Gagal memuat data penempatan pengajar dari database.",
       }));
       pushToast("Gagal memuat data penempatan pengajar.", "error");
     }
@@ -1969,18 +1967,15 @@ export function App() {
 
     setPenempatanStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      for (let index = 0; index < recordsToSave.length; index += 1) {
-        await fetch(appsScriptUrl, {
-          method: "POST",
-          mode: "no-cors",
-          body: JSON.stringify({
-            action: "savePenempatanPengajar",
-            sheetName: "Penempatan Pengajar",
-            spreadsheetId: mainSpreadsheetId,
-            record: recordsToSave[index],
-            oldRecord: index === 0 ? penempatanOldRecord : null,
-          }),
-        });
+      const bucket = dataBucket["Penempatan Pengajar"];
+      const rows = await listRows(bucket);
+      const targetKode = normalizeValueKey(draftValue.kodePengajar);
+      const targetIds = rows
+        .filter((row) => normalizeValueKey(row.data["Kode Pengajar"]) === targetKode)
+        .map((row) => row.id);
+      await deleteRowsByIds(targetIds);
+      for (const item of recordsToSave) {
+        await insertRow(bucket, item);
       }
       setIsPenempatanModalOpen(false);
       setPenempatanError("");
@@ -2002,16 +1997,15 @@ export function App() {
       async () => {
         setPenempatanStatus((prev) => ({ ...prev, loading: true, error: "" }));
         try {
-          await fetch(appsScriptUrl, {
-            method: "POST",
-            mode: "no-cors",
-            body: JSON.stringify({
-              action: "deletePenempatanPengajar",
-              sheetName: "Penempatan Pengajar",
-              spreadsheetId: mainSpreadsheetId,
-              record,
-            }),
-          });
+          const rows = await listRows(dataBucket["Penempatan Pengajar"]);
+          const targetIds = rows
+            .filter(
+              (row) =>
+                normalizeValueKey(row.data["Kode Pengajar"]) ===
+                normalizeValueKey(record["Kode Pengajar"])
+            )
+            .map((row) => row.id);
+          await deleteRowsByIds(targetIds);
           await handleLoadPenempatanPengajar();
           pushToast("Penempatan pengajar berhasil dihapus.", "success");
         } catch (error) {
@@ -2057,15 +2051,10 @@ export function App() {
   const handleLoadPermintaanPengajar = async () => {
     setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const response = await fetch(
-        `${appsScriptUrl}?sheet=${encodeURIComponent("Permintaan Pengajar Antar Cabang")}&spreadsheetId=${encodeURIComponent(mainSpreadsheetId)}`
-      );
-      if (!response.ok) {
-        throw new Error("Gagal memuat data permintaan pengajar.");
-      }
-      const payload = await response.json();
-      const parsed = parseGenericSheet(payload);
-      const normalized = parsed.records.map((record) => normalizePermintaanRecord(record));
+      const rows = await listRows(dataBucket["Permintaan Pengajar Antar Cabang"]);
+      const normalized = rows
+        .map((row) => toRecord(row))
+        .map((record) => normalizePermintaanRecord(record));
       setPermintaanRecords(normalized);
       setPermintaanStatus({
         loading: false,
@@ -2107,6 +2096,284 @@ export function App() {
 
   const handleRefreshAllData = async () => {
     await refreshAllData(true);
+  };
+
+  type ImportMode =
+    | "schedule"
+    | "mapel"
+    | "pengajar"
+    | "penempatan"
+    | "suratTugas"
+    | "permintaan";
+
+  const importTargetByMenu = {
+    bulanIni: {
+      bucket: dataBucket["Jadwal Bulan ini"],
+      label: "Jadwal Reguler",
+      mode: "schedule",
+    },
+    jadwalTambahanPelayanan: {
+      bucket: dataBucket["Jadwal Khusus"],
+      label: "Jadwal Tambahan & Pelayanan",
+      mode: "schedule",
+    },
+    mataPelajaran: {
+      bucket: dataBucket["Mata Pelajaran"],
+      label: "Mata Pelajaran",
+      mode: "mapel",
+    },
+    pengajar: {
+      bucket: dataBucket["Data Pengajar"],
+      label: "Pengajar",
+      mode: "pengajar",
+    },
+    penempatanPengajar: {
+      bucket: dataBucket["Penempatan Pengajar"],
+      label: "Penempatan Pengajar",
+      mode: "penempatan",
+    },
+  } as const;
+
+  const templateHeadersByMenu = {
+    bulanIni: ["Cabang", "Kelas", "Tanggal", "Mapel", "Pengajar", "Waktu", "Urutan Kelas"],
+    jadwalTambahanPelayanan: [
+      "Cabang",
+      "Kelas",
+      "Sekolah",
+      "Tanggal",
+      "Mapel",
+      "Pengajar",
+      "Waktu",
+      "Urutan Kelas",
+    ],
+    mataPelajaran: ["Mapel", "Kode_Mapel"],
+    pengajar: [
+      "Kode Pengajar",
+      "Nama",
+      "Bidang Studi",
+      "Email",
+      "No.WhatsApp",
+      "Domisili",
+      "Username",
+      "Password",
+    ],
+    penempatanPengajar: [
+      "Kode Pengajar",
+      "Nama Pengajar",
+      "Domisili",
+      "Hari",
+      "Jam Mulai",
+      "Jam Selesai",
+      "Cabang Penempatan",
+    ],
+  } as const;
+
+  const normalizeImportRows = (
+    rows: Record<string, unknown>[],
+    mode: ImportMode
+  ) => {
+    if (mode === "schedule") {
+      return rows
+        .map((row) => {
+          const tanggalRaw = getEntryValue(row, ["Tanggal", "Date"]);
+          const parsedTanggal = parseFlexibleDate(tanggalRaw);
+          return {
+            Cabang: getEntryValue(row, ["Cabang"]).trim(),
+            Kelas: getEntryValue(row, ["Kelas"]).trim(),
+            Sekolah: getEntryValue(row, ["Sekolah"]).trim(),
+            Tanggal: parsedTanggal ? formatScheduleLabel(parsedTanggal) : tanggalRaw.trim(),
+            Mapel: getEntryValue(row, ["Mapel", "Mata Pelajaran"]).trim(),
+            Pengajar: getEntryValue(row, ["Pengajar", "Guru"]).trim(),
+            Waktu: getEntryValue(row, ["Waktu", "Jam"]).trim(),
+            "Urutan Kelas": getEntryValue(row, ["Urutan Kelas", "Urutan", "Class Order"]).trim(),
+          };
+        })
+        .filter(
+          (row) =>
+            (row.Cabang || row.Kelas || row.Sekolah) &&
+            (row.Tanggal || row.Mapel || row.Pengajar || row.Waktu)
+        );
+    }
+
+    if (mode === "mapel") {
+      return rows
+        .map((row) => ({
+          Mapel: getEntryValue(row, ["Mapel", "Mata Pelajaran"]).trim(),
+          Kode_Mapel: getEntryValue(row, ["Kode_Mapel", "Kode Mapel", "Singkatan"]).trim(),
+        }))
+        .filter((row) => row.Mapel || row.Kode_Mapel);
+    }
+
+    if (mode === "pengajar") {
+      return rows
+        .map((row) => ({
+          "Kode Pengajar": getEntryValue(row, ["Kode Pengajar"]).trim(),
+          Nama: getEntryValue(row, ["Nama"]).trim(),
+          "Bidang Studi": getEntryValue(row, ["Bidang Studi"]).trim(),
+          Email: getEntryValue(row, ["Email"]).trim(),
+          "No.WhatsApp": getEntryValue(row, ["No.WhatsApp", "No WhatsApp", "No WA"]).trim(),
+          Domisili: getEntryValue(row, ["Domisili", "Cabang"]).trim(),
+          Username: getEntryValue(row, ["Username"]).trim(),
+          Password: getEntryValue(row, ["Password"]).trim(),
+        }))
+        .filter((row) => row["Kode Pengajar"] || row.Nama);
+    }
+
+    if (mode === "suratTugas") {
+      return rows
+        .map((row) => {
+          const tanggalRaw = getEntryValue(row, ["Tanggal", "Date"]);
+          const parsedTanggal = parseFlexibleDate(tanggalRaw);
+          const payload: Record<string, string> = {
+            "Kode Pengajar": getEntryValue(row, ["Kode Pengajar"]).trim(),
+            Tanggal: parsedTanggal ? formatScheduleLabel(parsedTanggal) : tanggalRaw.trim(),
+          };
+          for (let index = 1; index <= 10; index += 1) {
+            payload[`Sesi ${index}`] = getEntryValue(row, [`Sesi ${index}`]).trim();
+          }
+          return payload;
+        })
+        .filter((row) => row["Kode Pengajar"] || row.Tanggal);
+    }
+
+    if (mode === "penempatan") {
+      return rows
+        .map((row) => ({
+          "Kode Pengajar": getEntryValue(row, ["Kode Pengajar"]).trim(),
+          "Nama Pengajar": getEntryValue(row, ["Nama Pengajar", "Nama"]).trim(),
+          Domisili: getEntryValue(row, ["Domisili"]).trim(),
+          Hari: getEntryValue(row, ["Hari", "Hari Tersedia"]).trim(),
+          "Jam Mulai": formatTimeHHMM(getEntryValue(row, ["Jam Mulai"])),
+          "Jam Selesai": formatTimeHHMM(getEntryValue(row, ["Jam Selesai"])),
+          "Cabang Penempatan": getEntryValue(row, ["Cabang Penempatan"]).trim(),
+        }))
+        .filter((row) => row["Kode Pengajar"] || row["Nama Pengajar"]);
+    }
+
+    return rows
+      .map((row) => {
+        const tanggalMulaiRaw = getEntryValue(row, ["Tanggal Mulai"]);
+        const tanggalSelesaiRaw = getEntryValue(row, ["Tanggal Selesai"]);
+        const tanggalMulai = parseFlexibleDate(tanggalMulaiRaw);
+        const tanggalSelesai = parseFlexibleDate(tanggalSelesaiRaw);
+        return {
+          ID: getEntryValue(row, ["ID"]).trim() || `REQ-${Date.now()}-${Math.round(Math.random() * 1000)}`,
+          "Kode Pengajar": getEntryValue(row, ["Kode Pengajar"]).trim(),
+          "Nama Pengajar": getEntryValue(row, ["Nama Pengajar", "Nama"]).trim(),
+          "Cabang Peminta": getEntryValue(row, ["Cabang Peminta"]).trim(),
+          "Cabang Domisili": getEntryValue(row, ["Cabang Domisili"]).trim(),
+          "Tanggal Mulai": tanggalMulai ? formatScheduleLabel(tanggalMulai) : tanggalMulaiRaw.trim(),
+          "Tanggal Selesai": tanggalSelesai ? formatScheduleLabel(tanggalSelesai) : tanggalSelesaiRaw.trim(),
+          "Tanggal Khusus": getEntryValue(row, ["Tanggal Khusus"]).trim(),
+          Hari: getEntryValue(row, ["Hari", "Hari Tersedia"]).trim(),
+          "Jam Mulai": formatTimeHHMM(getEntryValue(row, ["Jam Mulai"])),
+          "Jam Selesai": formatTimeHHMM(getEntryValue(row, ["Jam Selesai"])),
+          Status: getEntryValue(row, ["Status"]).trim() || "Menunggu",
+          Catatan: getEntryValue(row, ["Catatan"]).trim(),
+        };
+      })
+      .filter((row) => row["Kode Pengajar"] || row["Nama Pengajar"]);
+  };
+
+  const handleOpenExcelImport = () => {
+    const canImport = isAdmin || activeKey === "penempatanPengajar";
+    if (!canImport) {
+      pushToast("Import data Excel hanya tersedia untuk Admin atau menu Penempatan Pengajar.", "error");
+      return;
+    }
+    importInputRef.current?.click();
+  };
+
+  const handleDownloadExcelTemplate = () => {
+    const canDownloadTemplate = isAdmin || activeKey === "penempatanPengajar";
+    if (!canDownloadTemplate) {
+      pushToast("Template Excel hanya tersedia untuk Admin atau menu Penempatan Pengajar.", "error");
+      return;
+    }
+
+    const target = importTargetByMenu[activeKey as keyof typeof importTargetByMenu];
+    const headers = templateHeadersByMenu[activeKey as keyof typeof templateHeadersByMenu];
+    if (!target || !headers?.length) {
+      pushToast("Template belum tersedia untuk menu ini.", "error");
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([[...headers]]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    const filename = `template-${target.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.xlsx`;
+    XLSX.writeFile(workbook, filename);
+    pushToast(`Template ${target.label} berhasil diunduh.`, "success");
+  };
+
+  const handleExcelImportChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) {
+      return;
+    }
+
+    const target = importTargetByMenu[activeKey as keyof typeof importTargetByMenu];
+    if (!target) {
+      pushToast("Menu ini belum mendukung import Excel.", "error");
+      return;
+    }
+
+    const canImport = isAdmin || activeKey === "penempatanPengajar";
+    if (!canImport) {
+      pushToast("Import data Excel hanya tersedia untuk Admin atau menu Penempatan Pengajar.", "error");
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.SheetNames[0];
+      if (!firstSheet) {
+        throw new Error("Sheet Excel tidak ditemukan.");
+      }
+      const worksheet = workbook.Sheets[firstSheet];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+        defval: "",
+      });
+      const normalizedRows = normalizeImportRows(rows, target.mode);
+      if (normalizedRows.length === 0) {
+        throw new Error("Data Excel kosong atau header tidak sesuai.");
+      }
+
+      if (target.mode === "penempatan" && !isAdmin) {
+        const userCabang = (restrictedCabang || authSession?.cabang || "").trim();
+        if (!userCabang) {
+          throw new Error("Cabang user tidak ditemukan. Silakan login ulang.");
+        }
+
+        const existingRows = await listRows(target.bucket);
+        const ownRowIds = existingRows
+          .filter((row) => normalizeText(row.data.Domisili || "") === normalizeText(userCabang))
+          .map((row) => row.id);
+
+        if (ownRowIds.length > 0) {
+          await deleteRowsByIds(ownRowIds);
+        }
+
+        const scopedRows = normalizedRows.map((row) => ({
+          ...row,
+          Domisili: userCabang,
+        }));
+        for (const row of scopedRows) {
+          await insertRow(target.bucket, row);
+        }
+      } else {
+        await replaceBucketRows(target.bucket, normalizedRows);
+      }
+      await refreshAllData(false);
+      pushToast(`Import ${target.label} berhasil (${normalizedRows.length} baris).`, "success");
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : "Import Excel gagal diproses.", "error");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleOpenPermintaanModal = () => {
@@ -2254,16 +2521,18 @@ export function App() {
 
     setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify({
-          action: "savePermintaanPengajar",
-          sheetName: "Permintaan Pengajar Antar Cabang",
-          spreadsheetId: mainSpreadsheetId,
-          record,
-        }),
-      });
+      const bucket = dataBucket["Permintaan Pengajar Antar Cabang"];
+      const rows = await listRows(bucket);
+      const existing = rows.find(
+        (row) =>
+          normalizeValueKey(row.data.ID) === normalizeValueKey(record.ID) ||
+          normalizeValueKey(row.data["Kode Pengajar"]) === normalizeValueKey(record["Kode Pengajar"])
+      );
+      if (existing) {
+        await updateRow(existing.id, record);
+      } else {
+        await insertRow(bucket, record);
+      }
       setIsPermintaanModalOpen(false);
       setPermintaanError("");
       await handleLoadPermintaanPengajar();
@@ -2298,16 +2567,11 @@ export function App() {
       async () => {
         setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
         try {
-          await fetch(appsScriptUrl, {
-            method: "POST",
-            mode: "no-cors",
-            body: JSON.stringify({
-              action: "deletePermintaanPengajar",
-              sheetName: "Permintaan Pengajar Antar Cabang",
-              spreadsheetId: mainSpreadsheetId,
-              record,
-            }),
-          });
+          const rows = await listRows(dataBucket["Permintaan Pengajar Antar Cabang"]);
+          const targetIds = rows
+            .filter((row) => normalizeValueKey(row.data.ID) === normalizeValueKey(record.ID))
+            .map((row) => row.id);
+          await deleteRowsByIds(targetIds);
           await Promise.all([
             handleLoadPermintaanPengajar(),
             handleLoadFromSheet("bulanIni"),
@@ -2334,17 +2598,16 @@ export function App() {
   ) => {
     setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      await fetch(appsScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify({
-          action: "updatePermintaanStatus",
-          sheetName: "Permintaan Pengajar Antar Cabang",
-          spreadsheetId: mainSpreadsheetId,
-          record,
-          status,
-        }),
-      });
+      const rows = await listRows(dataBucket["Permintaan Pengajar Antar Cabang"]);
+      const existing = rows.find(
+        (row) => normalizeValueKey(row.data.ID) === normalizeValueKey(record.ID)
+      );
+      if (existing) {
+        await updateRow(existing.id, {
+          ...existing.data,
+          Status: status,
+        });
+      }
       await handleLoadPermintaanPengajar();
       pushToast(`Permintaan pengajar ${status.toLowerCase()}.`, "success");
     } catch (error) {
@@ -2824,33 +3087,131 @@ export function App() {
     scheduleKey: ScheduleMenuKey = activeScheduleKey
   ) => {
     setSheetStatus((prev) => ({ ...prev, saving: true, error: "" }));
-    const payloadWithSpreadsheet = {
-      spreadsheetId: mainSpreadsheetId,
-      sheetName: scheduleSheetByKey[scheduleKey],
-      ...payload,
-    };
+    const bucket = dataBucket[scheduleSheetByKey[scheduleKey]];
 
-    const attemptJsonRequest = async () => {
-      const response = await fetch(appsScriptUrl, {
-        method: "POST",
-        body: JSON.stringify(payloadWithSpreadsheet),
+    const syncSuratTugasBucket = async () => {
+      const regulerRows = await listRows(dataBucket["Jadwal Bulan ini"]);
+      const khususRows = await listRows(dataBucket["Jadwal Khusus"]);
+      const allRows = [...regulerRows, ...khususRows].map((row) => row.data);
+      const now = new Date();
+      const day = now.getDate();
+      const month = now
+        .toLocaleDateString("id-ID", { month: "long" })
+        .toLowerCase();
+      const year = now.getFullYear();
+      const time = now.toLocaleTimeString("en-GB", { hour12: false });
+      const updatedLabel = `${day} ${month} ${year} ${time}`;
+
+      const grouped = new Map<string, string[]>();
+      allRows.forEach((row) => {
+        const kodePengajar = (row.Pengajar || "").trim();
+        const mapel = (row.Mapel || "").trim();
+        const waktu = (row.Waktu || "").trim();
+        const cabang = (row.Cabang || "").trim();
+        const kelas = (row.Kelas || "").trim();
+        const sekolah = (row.Sekolah || "").trim();
+        const tanggalLabel = formatSheetTanggal(row.Tanggal || "");
+        if (!kodePengajar || !tanggalLabel || !mapel || !waktu) {
+          return;
+        }
+        const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
+        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang} update ${updatedLabel}`;
+        const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
+        const list = grouped.get(key) ?? [];
+        list.push(sesiText);
+        grouped.set(key, list);
       });
 
-      const text = await response.text();
-      let parsed: { success?: boolean; message?: string } | null = null;
-      try {
-        parsed = text ? JSON.parse(text) : null;
-      } catch (jsonError) {
-        parsed = null;
+      const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
+        const [kodeKey, tanggalKey] = key.split("||");
+        const template = allRows.find(
+          (row) =>
+            normalizeValueKey(row.Pengajar) === kodeKey &&
+            normalizeValueKey(formatSheetTanggal(row.Tanggal || "")) === tanggalKey
+        );
+        const tanggalLabel = template ? formatSheetTanggal(template.Tanggal || "") : "";
+        const row: Record<string, string> = {
+          "Kode Pengajar": template?.Pengajar || "",
+          Tanggal: tanggalLabel,
+        };
+        for (let index = 0; index < 10; index += 1) {
+          row[`Sesi ${index + 1}`] = sesiList[index] || "";
+        }
+        return row;
+      });
+
+      await replaceBucketRows(dataBucket["Surat Tugas Pengajar"], suratRows);
+    };
+
+    const mutateScheduleBucket = async () => {
+      const action = String(payload.action || "");
+      const record = (payload.record as Record<string, string> | undefined) ?? null;
+      const oldRecord = (payload.oldRecord as Record<string, string> | undefined) ?? null;
+      const rows = await listRows(bucket);
+      const sessionFields = ["Cabang", "Kelas", "Sekolah", "Tanggal", "Mapel", "Pengajar", "Waktu"];
+
+      if (action === "append" && record) {
+        await insertRow(bucket, record);
+        return;
       }
 
-      if (!response.ok) {
-        throw new Error(parsed?.message || text || "Gagal menyimpan data.");
+      if (action === "upsert" && record) {
+        const target = rows.find((row) => {
+          if (oldRecord) {
+            return matchByFields(row.data, oldRecord, sessionFields);
+          }
+          return matchByFields(row.data, record, ["Cabang", "Kelas", "Sekolah", "Tanggal"]);
+        });
+        if (target) {
+          await updateRow(target.id, record);
+        } else {
+          await insertRow(bucket, record);
+        }
+        return;
       }
-      if (parsed && parsed.success === false) {
-        throw new Error(parsed.message || "Gagal menyimpan data.");
+
+      if (action === "deleteSession" && record) {
+        const targetIds = rows
+          .filter((row) => matchByFields(row.data, record, sessionFields))
+          .map((row) => row.id);
+        await deleteRowsByIds(targetIds);
+        return;
       }
-      return true;
+
+      if (action === "deleteClass") {
+        const cabang = String(payload.cabang ?? "");
+        const kelas = String(payload.kelas ?? "");
+        const sekolah = String(payload.sekolah ?? "");
+        const targetIds = rows
+          .filter(
+            (row) =>
+              normalizeValueKey(row.data.Cabang) === normalizeValueKey(cabang) &&
+              normalizeValueKey(row.data.Kelas) === normalizeValueKey(kelas) &&
+              normalizeValueKey(row.data.Sekolah || "") === normalizeValueKey(sekolah)
+          )
+          .map((row) => row.id);
+        await deleteRowsByIds(targetIds);
+        return;
+      }
+
+      if (action === "reorderClass") {
+        const cabang = String(payload.cabang ?? "");
+        const kelas = String(payload.kelas ?? "");
+        const sekolah = String(payload.sekolah ?? "");
+        const classOrder = String(payload.classOrder ?? "");
+        const targets = rows.filter(
+          (row) =>
+            normalizeValueKey(row.data.Cabang) === normalizeValueKey(cabang) &&
+            normalizeValueKey(row.data.Kelas) === normalizeValueKey(kelas) &&
+            normalizeValueKey(row.data.Sekolah || "") === normalizeValueKey(sekolah)
+        );
+        for (const row of targets) {
+          await updateRow(row.id, {
+            ...row.data,
+            "Urutan Kelas": classOrder,
+          });
+        }
+      }
     };
 
     const finalizeSuccess = () => {
@@ -2866,26 +3227,17 @@ export function App() {
     };
 
     try {
-      await attemptJsonRequest();
+      await mutateScheduleBucket();
+      await syncSuratTugasBucket();
       return finalizeSuccess();
     } catch (error) {
-      try {
-        await fetch(appsScriptUrl, {
-          method: "POST",
-          mode: "no-cors",
-          body: JSON.stringify(payloadWithSpreadsheet),
-        });
-        return finalizeSuccess();
-      } catch (fallbackError) {
-        setSheetStatus((prev) => ({
-          ...prev,
-          saving: false,
-          error:
-            "Gagal menyimpan ke database. Pastikan Apps Script sudah dipublikasikan dan akses publik diizinkan.",
-        }));
-        pushToast("Gagal menyimpan ke database.", "error");
-        return false;
-      }
+      setSheetStatus((prev) => ({
+        ...prev,
+        saving: false,
+        error: "Gagal menyimpan ke database Supabase.",
+      }));
+      pushToast("Gagal menyimpan ke database.", "error");
+      return false;
     }
   };
 
@@ -3120,6 +3472,7 @@ export function App() {
   };
 
   const isBusy =
+    isImporting ||
     sheetStatus.loading ||
     sheetStatus.saving ||
     mapelStatus.loading ||
@@ -3203,6 +3556,38 @@ export function App() {
                     </div>
                   </div>
                   <div className="d-flex align-items-center gap-2">
+                    {(isAdmin || activeKey === "penempatanPengajar") &&
+                    importTargetByMenu[activeKey as keyof typeof importTargetByMenu] ? (
+                      <button
+                        type="button"
+                        className="btn btn-outline-primary btn-sm"
+                        title="Import data Excel"
+                        onClick={handleOpenExcelImport}
+                        disabled={isImporting || isBusy}
+                      >
+                        {isImporting ? (
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                        ) : (
+                          <>
+                            <i className="bi bi-file-earmark-arrow-up me-1" />
+                            Import Excel
+                          </>
+                        )}
+                      </button>
+                    ) : null}
+                    {(isAdmin || activeKey === "penempatanPengajar") &&
+                    templateHeadersByMenu[activeKey as keyof typeof templateHeadersByMenu] ? (
+                      <button
+                        type="button"
+                        className="btn btn-outline-success btn-sm"
+                        title="Unduh template Excel"
+                        onClick={handleDownloadExcelTemplate}
+                        disabled={isImporting || isBusy}
+                      >
+                        <i className="bi bi-download me-1" />
+                        Template
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="btn btn-outline-secondary btn-sm"
@@ -3330,6 +3715,7 @@ export function App() {
                     activeDayGroups={activeDayGroups}
                     activeDayStartIndexes={activeDayStartIndexes}
                     monthScheduleGroups={monthScheduleGroups}
+                    conflictEntryIds={conflictingScheduleEntryIds}
                     editingSlot={editingSlot}
                     saving={sheetStatus.saving}
                     onInlineSaveClass={handleInlineSaveClass}
@@ -3455,6 +3841,8 @@ export function App() {
         isEditing={Boolean(editingPengajarOldKode)}
         draft={pengajarDraft}
         cabangLabel={restrictedCabang || authSession?.cabang || pengajarDraft.Domisili || "-"}
+        isDomisiliLocked={Boolean(restrictedCabang)}
+        domisiliOptions={cabangOptions}
         bidangStudiOptions={mapelOptions}
         error={pengajarError}
         loading={pengajarStatus.loading}
@@ -3508,6 +3896,16 @@ export function App() {
         onCancel={closeConfirmDialog}
         onConfirm={() => {
           void handleConfirmDialogAction();
+        }}
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="d-none"
+        onChange={(event) => {
+          void handleExcelImportChange(event);
         }}
       />
 
