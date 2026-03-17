@@ -25,6 +25,7 @@ import { PenempatanPengajarView } from "./components/views/PenempatanPengajarVie
 import { PermintaanPengajarView } from "./components/views/PermintaanPengajarView";
 import { SuratTugasView } from "./components/views/SuratTugasView";
 import { PrintJadwalView } from "./components/views/PrintJadwalView";
+import { HapusJadwalView } from "./components/views/HapusJadwalView";
 import { LoadingOverlay } from "./components/feedback/LoadingOverlay";
 import { ConfirmDialog } from "./components/feedback/ConfirmDialog";
 import { ToastStack } from "./components/feedback/ToastStack";
@@ -208,6 +209,11 @@ export function App() {
   const [selectedMonthKey, setSelectedMonthKey] = useState(() =>
     formatLocalDate(new Date()).slice(0, 7)
   );
+  const [deleteScheduleType, setDeleteScheduleType] = useState<"bulanIni" | "jadwalTambahanPelayanan">(
+    "bulanIni"
+  );
+  const [deleteMonthKey, setDeleteMonthKey] = useState(() => formatLocalDate(new Date()).slice(0, 7));
+  const [isDeletingByMonth, setIsDeletingByMonth] = useState(false);
   const [scheduleCabangView, setScheduleCabangView] = useState<Record<ScheduleMenuKey, string>>({
     bulanIni: "",
     jadwalTambahanPelayanan: "",
@@ -834,9 +840,14 @@ export function App() {
     return [];
   };
 
+  const visibleCategories = useMemo(
+    () => categories.filter((category) => (category.key === "hapusJadwal" ? isAdmin : true)),
+    [isAdmin]
+  );
+
   const activeConfig = useMemo(
-    () => categories.find((category) => category.key === activeKey) ?? categories[0],
-    [activeKey]
+    () => visibleCategories.find((category) => category.key === activeKey) ?? visibleCategories[0],
+    [activeKey, visibleCategories]
   );
 
 
@@ -2692,6 +2703,13 @@ export function App() {
   }, [authSession, restrictedCabang]);
 
   useEffect(() => {
+    const hasActive = visibleCategories.some((category) => category.key === activeKey);
+    if (!hasActive && visibleCategories[0]) {
+      setActiveKey(visibleCategories[0].key);
+    }
+  }, [activeKey, visibleCategories]);
+
+  useEffect(() => {
     if (!authSession) {
       return;
     }
@@ -3082,66 +3100,66 @@ export function App() {
     Waktu: waktu,
   });
 
+  const rebuildSuratTugasBucket = async () => {
+    const regulerRows = await listRows(dataBucket["Jadwal Bulan ini"]);
+    const khususRows = await listRows(dataBucket["Jadwal Khusus"]);
+    const allRows = [...regulerRows, ...khususRows].map((row) => row.data);
+    const now = new Date();
+    const day = now.getDate();
+    const month = now
+      .toLocaleDateString("id-ID", { month: "long" })
+      .toLowerCase();
+    const year = now.getFullYear();
+    const time = now.toLocaleTimeString("en-GB", { hour12: false });
+    const updatedLabel = `${day} ${month} ${year} ${time}`;
+
+    const grouped = new Map<string, string[]>();
+    allRows.forEach((row) => {
+      const kodePengajar = (row.Pengajar || "").trim();
+      const mapel = (row.Mapel || "").trim();
+      const waktu = (row.Waktu || "").trim();
+      const cabang = (row.Cabang || "").trim();
+      const kelas = (row.Kelas || "").trim();
+      const sekolah = (row.Sekolah || "").trim();
+      const tanggalLabel = formatSheetTanggal(row.Tanggal || "");
+      if (!kodePengajar || !tanggalLabel || !mapel || !waktu) {
+        return;
+      }
+      const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
+      const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang} update ${updatedLabel}`;
+      const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
+      const list = grouped.get(key) ?? [];
+      list.push(sesiText);
+      grouped.set(key, list);
+    });
+
+    const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
+      const [kodeKey, tanggalKey] = key.split("||");
+      const template = allRows.find(
+        (row) =>
+          normalizeValueKey(row.Pengajar) === kodeKey &&
+          normalizeValueKey(formatSheetTanggal(row.Tanggal || "")) === tanggalKey
+      );
+      const tanggalLabel = template ? formatSheetTanggal(template.Tanggal || "") : "";
+      const row: Record<string, string> = {
+        "Kode Pengajar": template?.Pengajar || "",
+        Tanggal: tanggalLabel,
+      };
+      for (let index = 0; index < 10; index += 1) {
+        row[`Sesi ${index + 1}`] = sesiList[index] || "";
+      }
+      return row;
+    });
+
+    await replaceBucketRows(dataBucket["Surat Tugas Pengajar"], suratRows);
+  };
+
   const postToSheet = async (
     payload: Record<string, unknown>,
     scheduleKey: ScheduleMenuKey = activeScheduleKey
   ) => {
     setSheetStatus((prev) => ({ ...prev, saving: true, error: "" }));
     const bucket = dataBucket[scheduleSheetByKey[scheduleKey]];
-
-    const syncSuratTugasBucket = async () => {
-      const regulerRows = await listRows(dataBucket["Jadwal Bulan ini"]);
-      const khususRows = await listRows(dataBucket["Jadwal Khusus"]);
-      const allRows = [...regulerRows, ...khususRows].map((row) => row.data);
-      const now = new Date();
-      const day = now.getDate();
-      const month = now
-        .toLocaleDateString("id-ID", { month: "long" })
-        .toLowerCase();
-      const year = now.getFullYear();
-      const time = now.toLocaleTimeString("en-GB", { hour12: false });
-      const updatedLabel = `${day} ${month} ${year} ${time}`;
-
-      const grouped = new Map<string, string[]>();
-      allRows.forEach((row) => {
-        const kodePengajar = (row.Pengajar || "").trim();
-        const mapel = (row.Mapel || "").trim();
-        const waktu = (row.Waktu || "").trim();
-        const cabang = (row.Cabang || "").trim();
-        const kelas = (row.Kelas || "").trim();
-        const sekolah = (row.Sekolah || "").trim();
-        const tanggalLabel = formatSheetTanggal(row.Tanggal || "");
-        if (!kodePengajar || !tanggalLabel || !mapel || !waktu) {
-          return;
-        }
-        const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
-        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang} update ${updatedLabel}`;
-        const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
-        const list = grouped.get(key) ?? [];
-        list.push(sesiText);
-        grouped.set(key, list);
-      });
-
-      const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
-        const [kodeKey, tanggalKey] = key.split("||");
-        const template = allRows.find(
-          (row) =>
-            normalizeValueKey(row.Pengajar) === kodeKey &&
-            normalizeValueKey(formatSheetTanggal(row.Tanggal || "")) === tanggalKey
-        );
-        const tanggalLabel = template ? formatSheetTanggal(template.Tanggal || "") : "";
-        const row: Record<string, string> = {
-          "Kode Pengajar": template?.Pengajar || "",
-          Tanggal: tanggalLabel,
-        };
-        for (let index = 0; index < 10; index += 1) {
-          row[`Sesi ${index + 1}`] = sesiList[index] || "";
-        }
-        return row;
-      });
-
-      await replaceBucketRows(dataBucket["Surat Tugas Pengajar"], suratRows);
-    };
 
     const mutateScheduleBucket = async () => {
       const action = String(payload.action || "");
@@ -3228,7 +3246,7 @@ export function App() {
 
     try {
       await mutateScheduleBucket();
-      await syncSuratTugasBucket();
+      await rebuildSuratTugasBucket();
       return finalizeSuccess();
     } catch (error) {
       setSheetStatus((prev) => ({
@@ -3243,6 +3261,67 @@ export function App() {
 
   const persistRecordToSheet = async (record: Record<string, string>) => {
     return postToSheet({ action: "upsert", record }, activeScheduleKey);
+  };
+
+  const handleDeleteScheduleByMonth = () => {
+    if (!isAdmin) {
+      pushToast("Menu ini hanya untuk Admin.", "error");
+      return;
+    }
+    const scheduleLabel =
+      deleteScheduleType === "bulanIni" ? "Jadwal Reguler" : "Jadwal Tambahan & Pelayanan";
+    const monthLabel =
+      monthOptions.find((option) => option.value === deleteMonthKey)?.label || deleteMonthKey;
+
+    openConfirmDialog(
+      `Hapus semua data ${scheduleLabel} pada ${monthLabel}? Data Surat Tugas Mengajar akan ikut disinkronkan.`,
+      async () => {
+        setIsDeletingByMonth(true);
+        setSheetStatus((prev) => ({ ...prev, error: "" }));
+        try {
+          const targetBucket = dataBucket[scheduleSheetByKey[deleteScheduleType]];
+          const rows = await listRows(targetBucket);
+          const targetIds = rows
+            .filter((row) => {
+              const parsed = parseFlexibleDate(row.data.Tanggal || "");
+              if (!parsed) {
+                return false;
+              }
+              return formatLocalDate(parsed).slice(0, 7) === deleteMonthKey;
+            })
+            .map((row) => row.id);
+
+          if (targetIds.length === 0) {
+            pushToast(`Tidak ada data ${scheduleLabel} pada ${monthLabel}.`, "info");
+            return;
+          }
+
+          await deleteRowsByIds(targetIds);
+          await rebuildSuratTugasBucket();
+          await Promise.all([
+            handleLoadFromSheet(deleteScheduleType, { preserveUiState: true }),
+            handleLoadSuratTugas(),
+          ]);
+          setSheetStatus((prev) => ({
+            ...prev,
+            lastSync: new Date().toLocaleString("id-ID"),
+          }));
+          pushToast(
+            `${targetIds.length} data ${scheduleLabel} pada ${monthLabel} berhasil dihapus.`,
+            "success"
+          );
+        } catch (error) {
+          setSheetStatus((prev) => ({
+            ...prev,
+            error: "Gagal menghapus jadwal berdasarkan bulan.",
+          }));
+          pushToast("Gagal menghapus jadwal berdasarkan bulan.", "error");
+        } finally {
+          setIsDeletingByMonth(false);
+        }
+      },
+      { title: "Hapus Jadwal Bulanan", confirmLabel: "Hapus Semua" }
+    );
   };
 
   const handleSelectBulanIniSlot = (
@@ -3518,7 +3597,7 @@ export function App() {
         <div className="row g-4">
           <div className={`d-none d-lg-block ${sidebarCollapsed ? "col-lg-1" : "col-lg-2"}`}>
             <SidebarMenu
-              categories={categories}
+              categories={visibleCategories}
               activeKey={activeKey}
               sidebarCollapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed((prev) => !prev)}
@@ -3660,6 +3739,7 @@ export function App() {
                   activeKey === "jadwalTambahanPelayanan" ||
                   activeKey === "monitoringKelas" ||
                   activeKey === "printJadwal" ||
+                  activeKey === "hapusJadwal" ||
                   activeKey === "dashboard") &&
                   sheetStatus.error && (
                   <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
@@ -3786,6 +3866,16 @@ export function App() {
                     regulerGroups={monthScheduleGroups}
                     tambahanGroups={tambahanPrintGroups}
                     mapelNameByKode={mapelNameByKode}
+                  />
+                ) : activeKey === "hapusJadwal" ? (
+                  <HapusJadwalView
+                    scheduleType={deleteScheduleType}
+                    monthOptions={monthOptions}
+                    selectedMonthKey={deleteMonthKey}
+                    deleting={isDeletingByMonth}
+                    onTypeChange={setDeleteScheduleType}
+                    onMonthChange={setDeleteMonthKey}
+                    onDelete={handleDeleteScheduleByMonth}
                   />
                 ) : null}
               </div>
@@ -3919,7 +4009,7 @@ export function App() {
       />
       <div className={`sidebar-mobile d-lg-none ${sidebarMobileOpen ? "show" : ""}`}>
         <SidebarMenu
-          categories={categories}
+          categories={visibleCategories}
           activeKey={activeKey}
           sidebarCollapsed={false}
           isMobile

@@ -2,6 +2,13 @@ import type { CategoryConfig, RecordItem } from "../types/app";
 
 export const categories: CategoryConfig[] = [
   {
+    key: "dashboard",
+    name: "Dashboard",
+    icon: "bi-speedometer2",
+    description: "",
+    fields: [],
+  },
+  {
     key: "bulanIni",
     name: "Jadwal Reguler",
     icon: "bi-calendar-week",
@@ -30,6 +37,13 @@ export const categories: CategoryConfig[] = [
       { key: "waktu", label: "Waktu", placeholder: "08:00 - 09:30" },
       { key: "catatan", label: "Catatan", placeholder: "Ujian Bab 2" },
     ],
+  },
+  {
+    key: "hapusJadwal",
+    name: "Hapus Jadwal",
+    icon: "bi-trash3",
+    description: "",
+    fields: [],
   },
   {
     key: "printJadwal",

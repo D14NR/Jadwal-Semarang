@@ -126,9 +126,27 @@ body {
   background-color: #e7f1ff;
 }
 
+.schedule-cell.schedule-cell-conflict {
+  background-color: #fff1f2;
+}
+
+.schedule-cell.schedule-cell-conflict:hover {
+  background-color: #ffe4e6;
+}
+
 .schedule-entry-btn {
   width: 100%;
   line-height: 1.2;
+}
+
+.schedule-entry-btn.is-conflict {
+  border-color: #f3a4ad;
+  background-color: #fff4f6;
+}
+
+.schedule-entry-btn.is-conflict.active {
+  border-color: #dc3545;
+  background-color: #ffe3e8;
 }
 
 .schedule-entry-btn.active {

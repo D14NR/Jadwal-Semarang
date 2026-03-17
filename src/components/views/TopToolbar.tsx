@@ -84,7 +84,10 @@ export function TopToolbar({
           </select>
         )}
 
-        {activeKey !== "suratTugasMengajar" && activeKey !== "printJadwal" && (
+        {activeKey !== "suratTugasMengajar" &&
+          activeKey !== "printJadwal" &&
+          activeKey !== "dashboard" &&
+          activeKey !== "hapusJadwal" && (
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}

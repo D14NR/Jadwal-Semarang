@@ -17,6 +17,8 @@ type PengajarModalProps = {
   isEditing: boolean;
   draft: PengajarDraft;
   cabangLabel: string;
+  isDomisiliLocked: boolean;
+  domisiliOptions: string[];
   bidangStudiOptions: SelectOption[];
   error: string;
   loading: boolean;
@@ -32,6 +34,8 @@ export function PengajarModal({
   isEditing,
   draft,
   cabangLabel,
+  isDomisiliLocked,
+  domisiliOptions,
   bidangStudiOptions,
   error,
   loading,
@@ -107,13 +111,28 @@ export function PengajarModal({
             </div>
             <div className="col-12 col-md-6">
               <label className="form-label small fw-semibold mt-2">Domisili</label>
-              <input
-                type="text"
-                value={draft.Domisili}
-                placeholder="Otomatis dari Cabang"
-                className="form-control form-control-sm"
-                readOnly
-              />
+              {isDomisiliLocked ? (
+                <input
+                  type="text"
+                  value={draft.Domisili}
+                  placeholder="Otomatis dari Cabang"
+                  className="form-control form-control-sm"
+                  readOnly
+                />
+              ) : (
+                <select
+                  className="form-select form-select-sm"
+                  value={draft.Domisili}
+                  onChange={(event) => onChange("Domisili", event.target.value)}
+                >
+                  <option value="">Pilih Domisili Cabang</option>
+                  {domisiliOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="col-12 col-md-6">
               <label className="form-label small fw-semibold mt-2">No.WhatsApp</label>

@@ -10,6 +10,7 @@ type ScheduleTableViewProps = {
   activeDayGroups: ScheduleDayGroup[];
   activeDayStartIndexes: Set<number>;
   monthScheduleGroups: ScheduleGroup[];
+  conflictEntryIds: Set<string>;
   editingSlot: EditingSlot | null;
   saving: boolean;
   onInlineSaveClass: (group: ScheduleGroup, kelas: string, sekolah: string) => Promise<boolean>;
@@ -26,6 +27,7 @@ export function ScheduleTableView({
   activeDayGroups,
   activeDayStartIndexes,
   monthScheduleGroups,
+  conflictEntryIds,
   editingSlot,
   saving,
   onInlineSaveClass,
@@ -57,6 +59,12 @@ export function ScheduleTableView({
       cancelClassEdit();
     }
   };
+
+  const hasVisibleConflict = monthScheduleGroups.some((group) =>
+    Object.values(group.entriesByDate).some((entryList) =>
+      entryList.some((entry) => conflictEntryIds.has(entry.id))
+    )
+  );
 
   return (
     <>
@@ -242,6 +250,7 @@ export function ScheduleTableView({
                   </td>
                   {activeScheduleDates.map((slot, index) => {
                     const entries = group.entriesByDate[slot.date] ?? [];
+                    const hasConflictInCell = entries.some((item) => conflictEntryIds.has(item.id));
                     const isEditingCell =
                       editingSlot?.cabang === group.cabang &&
                       editingSlot?.kelas === group.kelas &&
@@ -257,7 +266,9 @@ export function ScheduleTableView({
                         }}
                         className={`schedule-cell ${
                           activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""
-                        } ${isEditingCell && !editingSlot?.entryId ? "is-editing" : ""}`}
+                        } ${isEditingCell && !editingSlot?.entryId ? "is-editing" : ""} ${
+                          hasConflictInCell ? "schedule-cell-conflict" : ""
+                        }`}
                       >
                         {entries.length === 0 ? (
                           <span className="text-muted text-xxs">-</span>
@@ -271,6 +282,8 @@ export function ScheduleTableView({
                                   type="button"
                                   className={`btn btn-outline-secondary text-start p-1 schedule-entry-btn ${
                                     isEditingEntry ? "active" : ""
+                                  } ${
+                                    conflictEntryIds.has(item.id) ? "is-conflict" : ""
                                   }`}
                                    onClick={(event) => {
                                      event.stopPropagation();
@@ -333,6 +346,11 @@ export function ScheduleTableView({
           ? "Mode lihat cabang lain aktif. Anda hanya dapat melihat jadwal tanpa mengubah data."
           : "Klik sel untuk edit jadwal. Gunakan ikon panah di kolom aksi untuk menggeser urutan kelas."}
       </div>
+      {hasVisibleConflict ? (
+        <div className="alert alert-danger mt-2 text-xs mb-0">
+          Ada jadwal bentrok antar cabang. Sel berwarna merah menandakan pengajar di tanggal dan jam yang sama sudah terpakai di cabang lain.
+        </div>
+      ) : null}
     </>
   );
 }
