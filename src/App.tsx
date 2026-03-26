@@ -210,6 +210,10 @@ export function App() {
   const [selectedMonthKey, setSelectedMonthKey] = useState(() =>
     formatLocalDate(new Date()).slice(0, 7)
   );
+  const [printScheduleType, setPrintScheduleType] = useState<"reguler" | "tambahan">("reguler");
+  const [printSelectedClassKey, setPrintSelectedClassKey] = useState("");
+  const [printCopies, setPrintCopies] = useState(5);
+  const [printOrientation, setPrintOrientation] = useState<"landscape" | "portrait">("landscape");
   const [deleteScheduleType, setDeleteScheduleType] = useState<"bulanIni" | "jadwalTambahanPelayanan">(
     "bulanIni"
   );
@@ -3752,8 +3756,6 @@ export function App() {
               onToggle={() => setSidebarCollapsed((prev) => !prev)}
               onSelect={(key) => {
                 setActiveKey(key);
-                setQuery("");
-                setSelectedSuratTugasKode("");
                 clearEditing();
                 setIsClassModalOpen(false);
                 setIsPenempatanModalOpen(false);
@@ -3873,13 +3875,9 @@ export function App() {
                   }}
                   onMonthChange={(nextMonth) => {
                     setSelectedMonthKey(nextMonth);
-                    setSelectedSuratTugasMonthKey(nextMonth);
                   }}
                   onSuratMonthChange={(nextMonth) => {
                     setSelectedSuratTugasMonthKey(nextMonth);
-                    if (nextMonth) {
-                      setSelectedMonthKey(nextMonth);
-                    }
                     setSelectedSuratTugasKode("");
                   }}
                   onSuratKodeChange={setSelectedSuratTugasKode}
@@ -4011,6 +4009,14 @@ export function App() {
                     monthOptions={monthOptions}
                     selectedMonthKey={selectedMonthKey}
                     onMonthChange={setSelectedMonthKey}
+                    selectedScheduleType={printScheduleType}
+                    onScheduleTypeChange={setPrintScheduleType}
+                    selectedClassKey={printSelectedClassKey}
+                    onClassKeyChange={setPrintSelectedClassKey}
+                    printCopies={printCopies}
+                    onPrintCopiesChange={setPrintCopies}
+                    printOrientation={printOrientation}
+                    onPrintOrientationChange={setPrintOrientation}
                     regulerDates={monthScheduleDates}
                     regulerDayGroups={monthDayGroups}
                     regulerGroups={monthScheduleGroups}
@@ -4172,8 +4178,6 @@ export function App() {
           }}
           onSelect={(key) => {
             setActiveKey(key);
-            setQuery("");
-            setSelectedSuratTugasKode("");
             clearEditing();
             setIsClassModalOpen(false);
             setIsPenempatanModalOpen(false);

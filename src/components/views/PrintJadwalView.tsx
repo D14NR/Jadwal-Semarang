@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { buildMonthScheduleDates, formatScheduleLabelWithDay, parseFlexibleDate } from "../../utils/schedule";
 import { getTagStyle } from "../../utils/tagColor";
 import type { RecordItem, ScheduleDayGroup, ScheduleGroup, ScheduleSlotDate } from "../../types/app";
@@ -7,6 +7,14 @@ type PrintJadwalViewProps = {
   monthOptions: Array<{ value: string; label: string }>;
   selectedMonthKey: string;
   onMonthChange: (value: string) => void;
+  selectedScheduleType: ScheduleType;
+  onScheduleTypeChange: (value: ScheduleType) => void;
+  selectedClassKey: string;
+  onClassKeyChange: (value: string) => void;
+  printCopies: number;
+  onPrintCopiesChange: (value: number) => void;
+  printOrientation: PrintOrientation;
+  onPrintOrientationChange: (value: PrintOrientation) => void;
   regulerDates: ScheduleSlotDate[];
   regulerDayGroups: ScheduleDayGroup[];
   regulerGroups: ScheduleGroup[];
@@ -391,17 +399,21 @@ export function PrintJadwalView({
   monthOptions,
   selectedMonthKey,
   onMonthChange,
+  selectedScheduleType,
+  onScheduleTypeChange,
+  selectedClassKey,
+  onClassKeyChange,
+  printCopies,
+  onPrintCopiesChange,
+  printOrientation,
+  onPrintOrientationChange,
   regulerDates,
   regulerDayGroups,
   regulerGroups,
   tambahanGroups,
   mapelNameByKode,
 }: PrintJadwalViewProps) {
-  const [selectedScheduleType, setSelectedScheduleType] = useState<ScheduleType>("reguler");
-  const [selectedClassKey, setSelectedClassKey] = useState("");
-  const [printCopies, setPrintCopies] = useState(5);
   const [printError, setPrintError] = useState("");
-  const [printOrientation, setPrintOrientation] = useState<PrintOrientation>("landscape");
 
   const selectedMonthDate = useMemo(() => {
     const [year, month] = selectedMonthKey.split("-").map(Number);
@@ -445,11 +457,6 @@ export function PrintJadwalView({
       }),
     [activeGroups]
   );
-
-  useEffect(() => {
-    setSelectedClassKey("");
-    setPrintError("");
-  }, [selectedScheduleType, selectedMonthKey]);
 
   const selectedClassGroup = useMemo(
     () =>
@@ -529,7 +536,11 @@ export function PrintJadwalView({
           <select
             className="form-select form-select-sm"
             value={selectedScheduleType}
-            onChange={(event) => setSelectedScheduleType(event.target.value as ScheduleType)}
+            onChange={(event) => {
+              onScheduleTypeChange(event.target.value as ScheduleType);
+              onClassKeyChange("");
+              setPrintError("");
+            }}
           >
             <option value="reguler">Jadwal Reguler</option>
             <option value="tambahan">Jadwal Tambahan & Pelayanan</option>
@@ -540,7 +551,11 @@ export function PrintJadwalView({
           <select
             className="form-select form-select-sm"
             value={selectedMonthKey}
-            onChange={(event) => onMonthChange(event.target.value)}
+            onChange={(event) => {
+              onMonthChange(event.target.value);
+              onClassKeyChange("");
+              setPrintError("");
+            }}
           >
             {monthOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -554,7 +569,10 @@ export function PrintJadwalView({
           <select
             className="form-select form-select-sm"
             value={selectedClassKey}
-            onChange={(event) => setSelectedClassKey(event.target.value)}
+            onChange={(event) => {
+              onClassKeyChange(event.target.value);
+              setPrintError("");
+            }}
           >
             <option value="">Pilih kelas</option>
             {classOptions.map((option) => (
@@ -569,7 +587,7 @@ export function PrintJadwalView({
           <select
             className="form-select form-select-sm"
             value={printCopies}
-            onChange={(event) => setPrintCopies(Number(event.target.value))}
+            onChange={(event) => onPrintCopiesChange(Number(event.target.value))}
           >
             {Array.from({ length: 10 }, (_, index) => index + 1).map((copy) => (
               <option key={copy} value={copy}>
@@ -583,7 +601,7 @@ export function PrintJadwalView({
           <select
             className="form-select form-select-sm"
             value={printOrientation}
-            onChange={(event) => setPrintOrientation(event.target.value as PrintOrientation)}
+            onChange={(event) => onPrintOrientationChange(event.target.value as PrintOrientation)}
           >
             <option value="landscape">Landscape</option>
             <option value="portrait">Portrait</option>
