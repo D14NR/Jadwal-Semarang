@@ -1890,16 +1890,48 @@ export function App() {
   };
 
   const handleOpenPenempatanModal = (record?: Record<string, string>) => {
+    if (!isAdmin) {
+      pushToast("Hanya Admin yang dapat menambah atau mengubah data penempatan pengajar.", "error");
+      return;
+    }
+
     if (record) {
-      const days = parseHariPenempatan(record["Hari"] || "");
-      const jamMulai = record["Jam Mulai"] || "";
-      const jamSelesai = record["Jam Selesai"] || "";
+      const kodePengajar = record["Kode Pengajar"] || "";
+      const relatedRecords = penempatanRecords.filter(
+        (item) => normalizeValueKey(item["Kode Pengajar"] || "") === normalizeValueKey(kodePengajar)
+      );
+      const sourceRecords = relatedRecords.length > 0 ? relatedRecords : [record];
+
+      const availabilityByDay = new Map<string, { jamMulai: string; jamSelesai: string }>();
+      const cabangSet = new Set<string>();
+      sourceRecords.forEach((item) => {
+        parseCabangPenempatan(item["Cabang Penempatan"] || "").forEach((cabang) => cabangSet.add(cabang));
+        const jamMulai = formatTimeHHMM(item["Jam Mulai"] || "");
+        const jamSelesai = formatTimeHHMM(item["Jam Selesai"] || "");
+        parseHariPenempatan(item["Hari"] || "").forEach((hari) => {
+          if (!availabilityByDay.has(hari)) {
+            availabilityByDay.set(hari, { jamMulai, jamSelesai });
+          }
+        });
+      });
+
+      const availabilityList = weekDays.map((hari) => {
+        const value = availabilityByDay.get(hari);
+        return {
+          hari,
+          enabled: Boolean(value),
+          jamMulai: value?.jamMulai || "",
+          jamSelesai: value?.jamSelesai || "",
+        };
+      });
+
       setPenempatanDraft({
-        kodePengajar: record["Kode Pengajar"] || "",
-        namaPengajar: record["Nama Pengajar"] || "",
-        domisili: restrictedCabang || record["Domisili"] || "",
-        availabilityList: createAvailabilityList(jamMulai, jamSelesai, days),
-        cabangList: parseCabangPenempatan(record["Cabang Penempatan"] || ""),
+        kodePengajar,
+        namaPengajar:
+          record["Nama Pengajar"] || sourceRecords.find((item) => item["Nama Pengajar"] || "")?.["Nama Pengajar"] || "",
+        domisili: restrictedCabang || record["Domisili"] || sourceRecords[0]?.["Domisili"] || "",
+        availabilityList,
+        cabangList: Array.from(cabangSet),
       });
       setPenempatanOldRecord(record);
     } else {
@@ -1917,6 +1949,11 @@ export function App() {
   };
 
   const handleSavePenempatanPengajar = async () => {
+    if (!isAdmin) {
+      setPenempatanError("Hanya Admin yang dapat menyimpan data penempatan pengajar.");
+      return;
+    }
+
     const uniqueCabang = Array.from(new Set(penempatanDraft.cabangList));
     const selectedAvailabilities = penempatanDraft.availabilityList
       .filter((item) => item.enabled)
@@ -2003,6 +2040,11 @@ export function App() {
   };
 
   const handleDeletePenempatanPengajar = (record: Record<string, string>) => {
+    if (!isAdmin) {
+      pushToast("Hanya Admin yang dapat menghapus data penempatan pengajar.", "error");
+      return;
+    }
+
     openConfirmDialog(
       `Hapus penempatan untuk ${record["Nama Pengajar"] || record["Kode Pengajar"]}?`,
       async () => {
@@ -2287,18 +2329,18 @@ export function App() {
   };
 
   const handleOpenExcelImport = () => {
-    const canImport = isAdmin || activeKey === "penempatanPengajar";
+    const canImport = isAdmin;
     if (!canImport) {
-      pushToast("Import data Excel hanya tersedia untuk Admin atau menu Penempatan Pengajar.", "error");
+      pushToast("Import data Excel hanya tersedia untuk Admin.", "error");
       return;
     }
     importInputRef.current?.click();
   };
 
   const handleDownloadExcelTemplate = () => {
-    const canDownloadTemplate = isAdmin || activeKey === "penempatanPengajar";
+    const canDownloadTemplate = isAdmin;
     if (!canDownloadTemplate) {
-      pushToast("Template Excel hanya tersedia untuk Admin atau menu Penempatan Pengajar.", "error");
+      pushToast("Template Excel hanya tersedia untuk Admin.", "error");
       return;
     }
 
@@ -2330,9 +2372,9 @@ export function App() {
       return;
     }
 
-    const canImport = isAdmin || activeKey === "penempatanPengajar";
+    const canImport = isAdmin;
     if (!canImport) {
-      pushToast("Import data Excel hanya tersedia untuk Admin atau menu Penempatan Pengajar.", "error");
+      pushToast("Import data Excel hanya tersedia untuk Admin.", "error");
       return;
     }
 
@@ -2353,31 +2395,7 @@ export function App() {
         throw new Error("Data Excel kosong atau header tidak sesuai.");
       }
 
-      if (target.mode === "penempatan" && !isAdmin) {
-        const userCabang = (restrictedCabang || authSession?.cabang || "").trim();
-        if (!userCabang) {
-          throw new Error("Cabang user tidak ditemukan. Silakan login ulang.");
-        }
-
-        const existingRows = await listRows(target.bucket);
-        const ownRowIds = existingRows
-          .filter((row) => normalizeText(row.data.Domisili || "") === normalizeText(userCabang))
-          .map((row) => row.id);
-
-        if (ownRowIds.length > 0) {
-          await deleteRowsByIds(ownRowIds);
-        }
-
-        const scopedRows = normalizedRows.map((row) => ({
-          ...row,
-          Domisili: userCabang,
-        }));
-        for (const row of scopedRows) {
-          await insertRow(target.bucket, row);
-        }
-      } else {
-        await replaceBucketRows(target.bucket, normalizedRows);
-      }
+      await replaceBucketRows(target.bucket, normalizedRows);
       await refreshAllData(false);
       pushToast(`Import ${target.label} berhasil (${normalizedRows.length} baris).`, "success");
     } catch (error) {
@@ -3635,7 +3653,7 @@ export function App() {
                     </div>
                   </div>
                   <div className="d-flex align-items-center gap-2">
-                    {(isAdmin || activeKey === "penempatanPengajar") &&
+                    {isAdmin &&
                     importTargetByMenu[activeKey as keyof typeof importTargetByMenu] ? (
                       <button
                         type="button"
@@ -3654,7 +3672,7 @@ export function App() {
                         )}
                       </button>
                     ) : null}
-                    {(isAdmin || activeKey === "penempatanPengajar") &&
+                    {isAdmin &&
                     templateHeadersByMenu[activeKey as keyof typeof templateHeadersByMenu] ? (
                       <button
                         type="button"
@@ -3827,6 +3845,7 @@ export function App() {
                   />
                 ) : activeKey === "penempatanPengajar" ? (
                   <PenempatanPengajarView
+                    canManage={isAdmin}
                     loading={penempatanStatus.loading}
                     records={filteredPenempatanRecords}
                     query={query}
