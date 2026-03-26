@@ -12,12 +12,15 @@ type EditScheduleModalProps = {
   };
   mapelOptions: SelectOption[];
   pengajarOptions: SelectOption[];
+  copyDateOptions: SelectOption[];
+  selectedCopyDates: string[];
   pengajarAvailabilityWarning: string;
   pengajarAvailableDateLabels: string[];
   conflictError: string;
   saving: boolean;
   onClose: () => void;
   onDraftChange: (field: "mapel" | "pengajar" | "waktuMulai" | "waktuSelesai", value: string) => void;
+  onCopyDatesChange: (values: string[]) => void;
   onDelete: () => void;
   onSave: () => void;
 };
@@ -51,12 +54,15 @@ export function EditScheduleModal({
   draft,
   mapelOptions,
   pengajarOptions,
+  copyDateOptions,
+  selectedCopyDates,
   pengajarAvailabilityWarning,
   pengajarAvailableDateLabels,
   conflictError,
   saving,
   onClose,
   onDraftChange,
+  onCopyDatesChange,
   onDelete,
   onSave,
 }: EditScheduleModalProps) {
@@ -146,6 +152,22 @@ export function EditScheduleModal({
                 className="form-control form-control-sm"
               />
             </div>
+          </div>
+          <label className="form-label small fw-semibold mt-3">Salin ke Tanggal Lain</label>
+          <Select
+            value={copyDateOptions.filter((option) => selectedCopyDates.includes(option.value))}
+            onChange={(options) =>
+              onCopyDatesChange((options || []).map((option) => option.value))
+            }
+            options={copyDateOptions}
+            placeholder="Pilih satu atau beberapa tanggal..."
+            isMulti
+            isSearchable
+            closeMenuOnSelect={false}
+            styles={compactSelectStyles}
+          />
+          <div className="text-muted small mt-1">
+            Jadwal yang disimpan akan otomatis disalin ke tanggal terpilih.
           </div>
           {draft.pengajar && (
             <div className="text-muted small mt-2">

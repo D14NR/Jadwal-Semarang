@@ -92,6 +92,7 @@ export function App() {
     waktuMulai: "",
     waktuSelesai: "",
   });
+  const [copyTargetDates, setCopyTargetDates] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [sheetStatus, setSheetStatus] = useState({
     loading: false,
@@ -622,6 +623,15 @@ export function App() {
     });
     return new Set(indexes);
   }, [activeDayGroups]);
+
+  const copyDateOptions = useMemo(() => {
+    if (!editingSlot) {
+      return [] as { value: string; label: string }[];
+    }
+    return activeScheduleDates
+      .filter((slot) => slot.date !== editingSlot.tanggal)
+      .map((slot) => ({ value: slot.date, label: slot.label }));
+  }, [activeScheduleDates, editingSlot]);
 
   const suratTugasCalendar = useMemo(() => {
     if (!selectedSuratTugasMonthDate) {
@@ -1443,6 +1453,7 @@ export function App() {
   const clearEditing = () => {
     setEditingSlot(null);
     setDraft({ mapel: "", pengajar: "", waktuMulai: "", waktuSelesai: "" });
+    setCopyTargetDates([]);
     setConflictError("");
   };
 
@@ -3191,6 +3202,16 @@ export function App() {
         return;
       }
 
+      if (action === "appendMany") {
+        const recordsToAppend = ((payload.records as Record<string, string>[] | undefined) || []).filter(
+          (item) => item && Object.keys(item).length > 0
+        );
+        for (const item of recordsToAppend) {
+          await insertRow(bucket, item);
+        }
+        return;
+      }
+
       if (action === "upsert" && record) {
         const target = rows.find((row) => {
           if (oldRecord) {
@@ -3376,6 +3397,7 @@ export function App() {
       waktuMulai: waktuParts[0] ?? "",
       waktuSelesai: waktuParts[1] ?? "",
     });
+    setCopyTargetDates([]);
     setConflictError("");
   };
 
@@ -3465,6 +3487,97 @@ export function App() {
       )?.classOrder ||
       "";
 
+    const dateLabelByKey = new Map(activeScheduleDates.map((slot) => [slot.date, slot.label]));
+    const currentEntries = records[activeScheduleKey] ?? [];
+    const sanitizedCopyDates = Array.from(
+      new Set(
+        copyTargetDates.filter(
+          (dateKey) => dateKey !== tanggal && dateLabelByKey.has(dateKey)
+        )
+      )
+    );
+    const validCopyDates: string[] = [];
+    const skippedCopyLabels: string[] = [];
+
+    if (sanitizedCopyDates.length > 0 && (nextValues.mapel || nextValues.pengajar || nextValues.waktu)) {
+      for (const targetDate of sanitizedCopyDates) {
+        const dateLabel = dateLabelByKey.get(targetDate) || targetDate;
+        const duplicatedInClass = currentEntries.some(
+          (item) =>
+            item.id !== entryId &&
+            item.cabang === cabang &&
+            item.kelas === kelas &&
+            (item.sekolah || "") === sekolahValue &&
+            item.tanggal === targetDate &&
+            (item.mapel || "") === nextValues.mapel &&
+            (item.pengajar || "") === nextValues.pengajar &&
+            (item.waktu || "") === nextValues.waktu
+        );
+        if (duplicatedInClass) {
+          skippedCopyLabels.push(`${dateLabel} (sudah ada)`);
+          continue;
+        }
+
+        if (nextValues.pengajar && startTime !== null && endTime !== null) {
+          const copyDateEntries = allScheduleEntries.filter(
+            (item) =>
+              item.id !== entryId &&
+              item.tanggal === targetDate &&
+              item.pengajar?.toLowerCase() === pengajarKey
+          );
+          let conflictFound = false;
+          for (const entry of copyDateEntries) {
+            const range = parseRangeFromString(entry.waktu || "");
+            if (!range) {
+              continue;
+            }
+            const overlap = startTime < range.end && endTime > range.start;
+            if (overlap) {
+              conflictFound = true;
+              break;
+            }
+            if (entry.cabang !== cabang) {
+              const hasGap = startTime >= range.end + 60 || range.start >= endTime + 60;
+              if (!hasGap) {
+                conflictFound = true;
+                break;
+              }
+            }
+          }
+          if (conflictFound) {
+            skippedCopyLabels.push(`${dateLabel} (bentrok pengajar)`);
+            continue;
+          }
+        }
+
+        validCopyDates.push(targetDate);
+      }
+    }
+
+    const copiedItems: RecordItem[] = validCopyDates.map((dateKey, index) => ({
+      id: `${activeScheduleKey}-${Date.now()}-${index + 1000}`,
+      cabang,
+      kelas,
+      sekolah: sekolahValue,
+      classOrder: classOrderValue,
+      tanggal: dateKey,
+      tanggalSheet: dateLabelByKey.get(dateKey) || dateKey,
+      ...nextValues,
+      catatan: "",
+    }));
+    const copiedSheetRecords = validCopyDates.map((dateKey) =>
+      buildSheetRecord(
+        cabang,
+        kelas,
+        resolveSheetTanggal(dateLabelByKey.get(dateKey) || dateKey, dateKey),
+        nextValues.mapel,
+        nextValues.pengajar,
+        nextValues.waktu,
+        sekolahValue,
+        classOrderValue
+      )
+    );
+
     const sheetRecord = buildSheetRecord(
       cabang,
       kelas,
@@ -3494,20 +3607,23 @@ export function App() {
       if (entryId) {
         return {
           ...prev,
-          [activeScheduleKey]: current.map((item) =>
-            item.id === entryId
-              ? {
-                  ...item,
-                  ...nextValues,
-                  cabang,
-                  kelas,
-                  sekolah: sekolahValue,
-                  classOrder: classOrderValue,
-                  tanggal,
-                  tanggalSheet: sheetRecord.Tanggal,
-                }
-              : item
-          ),
+          [activeScheduleKey]: [
+            ...current.map((item) =>
+              item.id === entryId
+                ? {
+                    ...item,
+                    ...nextValues,
+                    cabang,
+                    kelas,
+                    sekolah: sekolahValue,
+                    classOrder: classOrderValue,
+                    tanggal,
+                    tanggalSheet: sheetRecord.Tanggal,
+                  }
+                : item
+            ),
+            ...copiedItems,
+          ],
         };
       }
       if (!nextValues.mapel && !nextValues.pengajar && !nextValues.waktu) {
@@ -3526,12 +3642,27 @@ export function App() {
       };
       return {
         ...prev,
-        [activeScheduleKey]: [...current, newItem],
+        [activeScheduleKey]: [...current, newItem, ...copiedItems],
       };
     });
     clearEditing();
+
+    if (skippedCopyLabels.length > 0) {
+      pushToast(
+        `Sebagian tanggal salinan dilewati: ${skippedCopyLabels.join(", ")}.`,
+        "info"
+      );
+    }
+
     if (entryId) {
       await postToSheet({ action: "upsert", record: sheetRecord, oldRecord: oldSheetRecord });
+      if (copiedSheetRecords.length > 0) {
+        await postToSheet({ action: "appendMany", records: copiedSheetRecords });
+      }
+      return;
+    }
+    if (copiedSheetRecords.length > 0) {
+      await postToSheet({ action: "appendMany", records: [sheetRecord, ...copiedSheetRecords] });
       return;
     }
     await postToSheet({ action: "append", record: sheetRecord });
@@ -3923,12 +4054,15 @@ export function App() {
         draft={draft}
         mapelOptions={mapelOptions}
         pengajarOptions={filteredPengajarOptions}
+        copyDateOptions={copyDateOptions}
+        selectedCopyDates={copyTargetDates}
         pengajarAvailabilityWarning={pengajarAvailabilityInfo.warning}
         pengajarAvailableDateLabels={pengajarAvailabilityInfo.availableDateLabels}
         conflictError={conflictError}
         saving={sheetStatus.saving}
         onClose={clearEditing}
         onDraftChange={handleDraftChange}
+        onCopyDatesChange={setCopyTargetDates}
         onDelete={handleDeleteSlot}
         onSave={handleSaveSlot}
       />
