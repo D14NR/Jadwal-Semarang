@@ -20,6 +20,7 @@ create table if not exists public.app_records (
       'pengajar',
       'surat_tugas',
       'penempatan_pengajar',
+      'izin_pengajar',
       'permintaan_pengajar'
     )
   )
@@ -120,6 +121,18 @@ create table if not exists public.penempatan_pengajar (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.izin_pengajar (
+  id uuid primary key default gen_random_uuid(),
+  kode_pengajar text not null,
+  nama_pengajar text not null,
+  domisili text not null default '',
+  tanggal_mulai text not null,
+  tanggal_selesai text not null,
+  keterangan text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.permintaan_pengajar_antar_cabang (
   id uuid primary key default gen_random_uuid(),
   kode_pengajar text not null,
@@ -187,6 +200,11 @@ create trigger trg_penempatan_updated_at
 before update on public.penempatan_pengajar
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_izin_pengajar_updated_at on public.izin_pengajar;
+create trigger trg_izin_pengajar_updated_at
+before update on public.izin_pengajar
+for each row execute function public.set_updated_at();
+
 drop trigger if exists trg_permintaan_updated_at on public.permintaan_pengajar_antar_cabang;
 create trigger trg_permintaan_updated_at
 before update on public.permintaan_pengajar_antar_cabang
@@ -203,6 +221,7 @@ alter table public.jadwal_reguler enable row level security;
 alter table public.jadwal_khusus enable row level security;
 alter table public.surat_tugas_pengajar enable row level security;
 alter table public.penempatan_pengajar enable row level security;
+alter table public.izin_pengajar enable row level security;
 alter table public.permintaan_pengajar_antar_cabang enable row level security;
 
 drop policy if exists app_records_anon_all on public.app_records;
@@ -243,6 +262,12 @@ with check (true);
 
 drop policy if exists penempatan_anon_all on public.penempatan_pengajar;
 create policy penempatan_anon_all on public.penempatan_pengajar
+for all to anon
+using (true)
+with check (true);
+
+drop policy if exists izin_pengajar_anon_all on public.izin_pengajar;
+create policy izin_pengajar_anon_all on public.izin_pengajar
 for all to anon
 using (true)
 with check (true);

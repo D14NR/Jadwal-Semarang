@@ -12,6 +12,10 @@ import {
   type PenempatanDraft,
 } from "./components/modals/PenempatanPengajarModal";
 import {
+  IzinPengajarModal,
+  type IzinPengajarDraft,
+} from "./components/modals/IzinPengajarModal";
+import {
   PermintaanPengajarModal,
   type PermintaanDraft,
 } from "./components/modals/PermintaanPengajarModal";
@@ -22,6 +26,7 @@ import { MonitoringKelasView } from "./components/views/MonitoringKelasView";
 import { MapelTableView } from "./components/views/MapelTableView";
 import { PengajarTableView } from "./components/views/PengajarTableView";
 import { PenempatanPengajarView } from "./components/views/PenempatanPengajarView";
+import { IzinPengajarView } from "./components/views/IzinPengajarView";
 import { PermintaanPengajarView } from "./components/views/PermintaanPengajarView";
 import { SuratTugasView } from "./components/views/SuratTugasView";
 import { PrintJadwalView } from "./components/views/PrintJadwalView";
@@ -72,6 +77,7 @@ export function App() {
     "Data Pengajar": "pengajar",
     "Surat Tugas Pengajar": "surat_tugas",
     "Penempatan Pengajar": "penempatan_pengajar",
+    "Izin Pengajar": "izin_pengajar",
     "Permintaan Pengajar Antar Cabang": "permintaan_pengajar",
   } as const;
 
@@ -126,6 +132,12 @@ export function App() {
     lastSync: "",
   });
   const [penempatanRecords, setPenempatanRecords] = useState<Record<string, string>[]>([]);
+  const [izinStatus, setIzinStatus] = useState({
+    loading: false,
+    error: "",
+    lastSync: "",
+  });
+  const [izinRecords, setIzinRecords] = useState<Record<string, string>[]>([]);
   const [permintaanStatus, setPermintaanStatus] = useState({
     loading: false,
     error: "",
@@ -187,6 +199,17 @@ export function App() {
   });
   const [penempatanOldRecord, setPenempatanOldRecord] = useState<Record<string, string> | null>(null);
   const [penempatanError, setPenempatanError] = useState("");
+  const [isIzinModalOpen, setIsIzinModalOpen] = useState(false);
+  const [izinDraft, setIzinDraft] = useState<IzinPengajarDraft>({
+    kodePengajar: "",
+    namaPengajar: "",
+    domisili: "",
+    tanggalMulai: "",
+    tanggalSelesai: "",
+    keterangan: "",
+  });
+  const [editingIzinId, setEditingIzinId] = useState<string | null>(null);
+  const [izinError, setIzinError] = useState("");
   const [isPermintaanModalOpen, setIsPermintaanModalOpen] = useState(false);
   const [permintaanDraft, setPermintaanDraft] = useState<PermintaanDraft>({
     id: "",
@@ -381,6 +404,31 @@ export function App() {
       label: `${record["Kode Pengajar"] || ""} - ${record["Nama"] || ""}`
     })).filter(opt => opt.value);
   }, [pengajarRecords]);
+
+  const pengajarByKode = useMemo(() => {
+    return pengajarRecords.reduce<Record<string, Record<string, string>>>((acc, record) => {
+      const kode = normalizeText(record["Kode Pengajar"] || "");
+      if (kode) {
+        acc[kode] = record;
+      }
+      return acc;
+    }, {});
+  }, [pengajarRecords]);
+
+  const pengajarIzinOptions = useMemo(() => {
+    const source = restrictedCabang
+      ? pengajarRecords.filter(
+          (record) => normalizeText(record["Domisili"] || "") === normalizeText(restrictedCabang)
+        )
+      : pengajarRecords;
+
+    return source
+      .map((record) => ({
+        value: (record["Kode Pengajar"] || "").trim().toLowerCase(),
+        label: `${record["Kode Pengajar"] || ""} - ${record["Nama"] || ""}`,
+      }))
+      .filter((option) => option.value);
+  }, [pengajarRecords, restrictedCabang]);
 
   const normalizeToken = (value: string) =>
     value
@@ -1087,6 +1135,26 @@ export function App() {
     return getApprovedPermintaanForCabang(kodePengajar, cabang, tanggal).length > 0;
   };
 
+  const getPengajarIzinOnDate = (kodePengajar: string, tanggal: string) => {
+    const kodeKey = normalizeText(kodePengajar);
+    const targetDate = parseFlexibleDate(tanggal);
+    if (!kodeKey || !targetDate) {
+      return null;
+    }
+
+    return izinRecords.find((record) => {
+      if (normalizeText(record["Kode Pengajar"] || "") !== kodeKey) {
+        return false;
+      }
+      const startDate = parseFlexibleDate(record["Tanggal Mulai"] || "");
+      const endDate = parseFlexibleDate(record["Tanggal Selesai"] || "");
+      if (!startDate || !endDate) {
+        return false;
+      }
+      return targetDate >= startDate && targetDate <= endDate;
+    });
+  };
+
   const pengajarAvailabilityInfo = useMemo(() => {
     const defaultResult = {
       warning: "",
@@ -1104,9 +1172,38 @@ export function App() {
         .map((entry) => entry.tanggal)
         .filter(Boolean)
     );
+    const izinDateLabels = new Set(
+      izinRecords
+        .filter((record) => normalizeText(record["Kode Pengajar"] || "") === normalizeText(draft.pengajar))
+        .flatMap((record) => {
+          const start = parseFlexibleDate(record["Tanggal Mulai"] || "");
+          const end = parseFlexibleDate(record["Tanggal Selesai"] || "");
+          if (!start || !end) {
+            return [];
+          }
+          const dates: string[] = [];
+          const cursor = new Date(start.getTime());
+          while (cursor <= end) {
+            dates.push(formatLocalDate(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          return dates;
+        })
+    );
     const availableDateLabels = activeScheduleDates
-      .filter((slot) => !occupiedDates.has(slot.date))
+      .filter((slot) => !occupiedDates.has(slot.date) && !izinDateLabels.has(slot.date))
       .map((slot) => slot.label);
+
+    const izinMatch = getPengajarIzinOnDate(draft.pengajar, editingSlot.tanggal);
+    if (izinMatch) {
+      const startLabel = izinMatch["Tanggal Mulai"] || "";
+      const endLabel = izinMatch["Tanggal Selesai"] || "";
+      const reason = (izinMatch.Keterangan || "").trim();
+      return {
+        warning: `Pengajar sedang izin pada rentang ${startLabel} s.d. ${endLabel}${reason ? ` (${reason})` : ""}.`,
+        availableDateLabels,
+      };
+    }
 
     const penempatanByPengajar = penempatanRecords.filter(
       (record) => (record["Kode Pengajar"] || "").trim().toLowerCase() === pengajarKey
@@ -1195,6 +1292,7 @@ export function App() {
     draft.waktuMulai,
     draft.waktuSelesai,
     editingSlot,
+    izinRecords,
     approvedPermintaanRecords,
     penempatanRecords,
   ]);
@@ -1274,6 +1372,21 @@ export function App() {
       Object.values(record).some((value) => String(value).toLowerCase().includes(lowered))
     );
   }, [penempatanRecords, query, restrictedCabang]);
+
+  const filteredIzinRecords = useMemo(() => {
+    const source = restrictedCabang
+      ? izinRecords.filter(
+          (record) => normalizeText(record.Domisili || "") === normalizeText(restrictedCabang)
+        )
+      : izinRecords;
+    if (!query.trim()) {
+      return source;
+    }
+    const lowered = query.toLowerCase();
+    return source.filter((record) =>
+      Object.values(record).some((value) => String(value).toLowerCase().includes(lowered))
+    );
+  }, [izinRecords, query, restrictedCabang]);
 
   const filteredPermintaanRecords = useMemo(() => {
     const source = permintaanRecords.filter((record) => {
@@ -1904,6 +2017,35 @@ export function App() {
     }
   };
 
+  const handlePenempatanDraftChange = (next: PenempatanDraft) => {
+    const selectedKode = normalizeText(next.kodePengajar || "");
+    const prevKode = normalizeText(penempatanDraft.kodePengajar || "");
+    const selectedPengajar = selectedKode ? pengajarByKode[selectedKode] : null;
+
+    const resolvedDraft: PenempatanDraft = {
+      ...next,
+      namaPengajar: selectedPengajar
+        ? selectedPengajar["Nama"] || next.namaPengajar
+        : next.namaPengajar,
+      domisili: restrictedCabang
+        ? restrictedCabang
+        : selectedPengajar
+          ? selectedPengajar["Domisili"] || next.domisili
+          : next.domisili,
+    };
+
+    if (!selectedKode) {
+      resolvedDraft.namaPengajar = "";
+      resolvedDraft.domisili = restrictedCabang || "";
+    }
+
+    if (selectedKode !== prevKode) {
+      setPenempatanError("");
+    }
+
+    setPenempatanDraft(resolvedDraft);
+  };
+
   const handleOpenPenempatanModal = (record?: Record<string, string>) => {
     if (!isAdmin) {
       pushToast("Hanya Admin yang dapat menambah atau mengubah data penempatan pengajar.", "error");
@@ -2089,6 +2231,158 @@ export function App() {
     );
   };
 
+  const normalizeIzinRecord = (record: Record<string, string>) => {
+    const startDate = parseFlexibleDate(record["Tanggal Mulai"] || "");
+    const endDate = parseFlexibleDate(record["Tanggal Selesai"] || "");
+    return {
+      _id: record.ID || record.Id || record.id || "",
+      "Kode Pengajar": (record["Kode Pengajar"] || "").trim().toLowerCase(),
+      "Nama Pengajar": record["Nama Pengajar"] || record.Nama || "",
+      Domisili: restrictedCabang || record.Domisili || "",
+      "Tanggal Mulai": startDate ? formatScheduleLabel(startDate) : "",
+      "Tanggal Selesai": endDate ? formatScheduleLabel(endDate) : "",
+      Keterangan: record.Keterangan || "",
+    };
+  };
+
+  const handleLoadIzinPengajar = async () => {
+    setIzinStatus((prev) => ({ ...prev, loading: true, error: "" }));
+    try {
+      const rows = await listRows(dataBucket["Izin Pengajar"]);
+      const normalized = rows
+        .map((row) => toRecord(row))
+        .map((record) => normalizeIzinRecord(record))
+        .filter((record) =>
+          restrictedCabang
+            ? normalizeText(record.Domisili || "") === normalizeText(restrictedCabang)
+            : true
+        );
+      setIzinRecords(normalized);
+      setIzinStatus({
+        loading: false,
+        error: "",
+        lastSync: new Date().toLocaleString("id-ID"),
+      });
+    } catch (error) {
+      setIzinStatus((prev) => ({
+        ...prev,
+        loading: false,
+        error: "Gagal memuat data izin pengajar.",
+      }));
+      pushToast("Gagal memuat data izin pengajar.", "error");
+    }
+  };
+
+  const handleOpenIzinModal = (record?: Record<string, string>) => {
+    if (record) {
+      setIzinDraft({
+        kodePengajar: (record["Kode Pengajar"] || "").trim().toLowerCase(),
+        namaPengajar: record["Nama Pengajar"] || "",
+        domisili: restrictedCabang || record.Domisili || "",
+        tanggalMulai: formatLocalDate(parseFlexibleDate(record["Tanggal Mulai"] || "") || new Date()),
+        tanggalSelesai: formatLocalDate(parseFlexibleDate(record["Tanggal Selesai"] || "") || new Date()),
+        keterangan: record.Keterangan || "",
+      });
+      setEditingIzinId(record._id || null);
+    } else {
+      const defaultDomisili = restrictedCabang || authSession?.cabang || "";
+      const today = formatLocalDate(new Date());
+      setIzinDraft({
+        kodePengajar: "",
+        namaPengajar: "",
+        domisili: defaultDomisili,
+        tanggalMulai: today,
+        tanggalSelesai: today,
+        keterangan: "",
+      });
+      setEditingIzinId(null);
+    }
+    setIzinError("");
+    setIsIzinModalOpen(true);
+  };
+
+  const handleSaveIzinPengajar = async () => {
+    const normalized = {
+      ...izinDraft,
+      kodePengajar: izinDraft.kodePengajar.trim().toLowerCase(),
+      namaPengajar: izinDraft.namaPengajar.trim(),
+      domisili: (restrictedCabang || izinDraft.domisili).trim(),
+      tanggalMulai: izinDraft.tanggalMulai.trim(),
+      tanggalSelesai: izinDraft.tanggalSelesai.trim(),
+      keterangan: izinDraft.keterangan.trim(),
+    };
+
+    if (!normalized.kodePengajar || !normalized.namaPengajar) {
+      setIzinError("Pengajar wajib dipilih.");
+      return;
+    }
+    const startDate = parseFlexibleDate(normalized.tanggalMulai);
+    const endDate = parseFlexibleDate(normalized.tanggalSelesai);
+    if (!startDate || !endDate) {
+      setIzinError("Tanggal mulai dan selesai wajib diisi.");
+      return;
+    }
+    if (startDate > endDate) {
+      setIzinError("Tanggal selesai tidak boleh lebih kecil dari tanggal mulai.");
+      return;
+    }
+
+    const record = {
+      "Kode Pengajar": normalized.kodePengajar,
+      "Nama Pengajar": normalized.namaPengajar,
+      Domisili: normalized.domisili,
+      "Tanggal Mulai": formatScheduleLabel(startDate),
+      "Tanggal Selesai": formatScheduleLabel(endDate),
+      Keterangan: normalized.keterangan,
+    };
+
+    setIzinStatus((prev) => ({ ...prev, loading: true, error: "" }));
+    try {
+      const bucket = dataBucket["Izin Pengajar"];
+      if (editingIzinId) {
+        await updateRow(editingIzinId, record);
+      } else {
+        await insertRow(bucket, record);
+      }
+      setIsIzinModalOpen(false);
+      setIzinError("");
+      await handleLoadIzinPengajar();
+      pushToast("Izin pengajar berhasil disimpan.", "success");
+    } catch (error) {
+      setIzinStatus((prev) => ({
+        ...prev,
+        loading: false,
+        error: "Gagal menyimpan izin pengajar.",
+      }));
+      pushToast("Gagal menyimpan izin pengajar.", "error");
+    }
+  };
+
+  const handleDeleteIzinPengajar = (record: Record<string, string>) => {
+    openConfirmDialog(
+      `Hapus izin untuk ${record["Nama Pengajar"] || record["Kode Pengajar"]}?`,
+      async () => {
+        setIzinStatus((prev) => ({ ...prev, loading: true, error: "" }));
+        try {
+          const targetId = record._id;
+          if (targetId) {
+            await deleteRowsByIds([targetId]);
+          }
+          await handleLoadIzinPengajar();
+          pushToast("Izin pengajar berhasil dihapus.", "success");
+        } catch (error) {
+          setIzinStatus((prev) => ({
+            ...prev,
+            loading: false,
+            error: "Gagal menghapus izin pengajar.",
+          }));
+          pushToast("Gagal menghapus izin pengajar.", "error");
+        }
+      },
+      { title: "Hapus Izin", confirmLabel: "Hapus" }
+    );
+  };
+
   const normalizePermintaanRecord = (record: Record<string, string>) => {
     const jamMulai = formatTimeHHMM(record["Jam Mulai"] || "");
     const jamSelesai = formatTimeHHMM(record["Jam Selesai"] || "");
@@ -2152,6 +2446,7 @@ export function App() {
         handleLoadPengajar(),
         handleLoadSuratTugas(),
         handleLoadPenempatanPengajar(),
+        handleLoadIzinPengajar(),
         handleLoadPermintaanPengajar(),
       ]);
       if (showToast) {
@@ -2804,6 +3099,16 @@ export function App() {
             );
             return { ...prev, pengajar: "" };
           }
+          const izinMatch = getPengajarIzinOnDate(nextPengajar, editingSlot.tanggal);
+          if (izinMatch) {
+            const startLabel = izinMatch["Tanggal Mulai"] || "";
+            const endLabel = izinMatch["Tanggal Selesai"] || "";
+            const reason = (izinMatch.Keterangan || "").trim();
+            setConflictError(
+              `Pengajar sedang izin pada rentang ${startLabel} s.d. ${endLabel}${reason ? ` (${reason})` : ""}.`
+            );
+            return { ...prev, pengajar: "" };
+          }
         }
         setConflictError("");
         return { ...prev, pengajar: nextPengajar };
@@ -3429,6 +3734,18 @@ export function App() {
       setConflictError(pengajarAvailabilityInfo.warning);
       return;
     }
+    if (nextValues.pengajar) {
+      const izinMatch = getPengajarIzinOnDate(nextValues.pengajar, tanggal);
+      if (izinMatch) {
+        const startLabel = izinMatch["Tanggal Mulai"] || "";
+        const endLabel = izinMatch["Tanggal Selesai"] || "";
+        const reason = (izinMatch.Keterangan || "").trim();
+        setConflictError(
+          `Pengajar sedang izin pada rentang ${startLabel} s.d. ${endLabel}${reason ? ` (${reason})` : ""}.`
+        );
+        return;
+      }
+    }
     const pengajarKey = nextValues.pengajar.toLowerCase();
     const startTime = parseTimeValue(waktuMulai);
     const endTime = parseTimeValue(waktuSelesai);
@@ -3523,6 +3840,11 @@ export function App() {
         }
 
         if (nextValues.pengajar && startTime !== null && endTime !== null) {
+          const izinAtTargetDate = getPengajarIzinOnDate(nextValues.pengajar, targetDate);
+          if (izinAtTargetDate) {
+            skippedCopyLabels.push(`${dateLabel} (pengajar izin)`);
+            continue;
+          }
           const copyDateEntries = allScheduleEntries.filter(
             (item) =>
               item.id !== entryId &&
@@ -3711,6 +4033,7 @@ export function App() {
     pengajarStatus.loading ||
     suratTugasStatus.loading ||
     penempatanStatus.loading ||
+    izinStatus.loading ||
     permintaanStatus.loading;
 
   const busyMessage = sheetStatus.saving
@@ -3759,6 +4082,7 @@ export function App() {
                 clearEditing();
                 setIsClassModalOpen(false);
                 setIsPenempatanModalOpen(false);
+                  setIsIzinModalOpen(false);
                 setIsPermintaanModalOpen(false);
               }}
             />
@@ -3861,6 +4185,7 @@ export function App() {
                   pengajarStatus={pengajarStatus}
                   suratTugasStatus={suratTugasStatus}
                   penempatanStatus={penempatanStatus}
+                  izinStatus={izinStatus}
                   permintaanStatus={permintaanStatus}
                   onQueryChange={setQuery}
                   onScheduleCabangChange={(nextCabang) => {
@@ -3919,6 +4244,12 @@ export function App() {
                 {activeKey === "penempatanPengajar" && penempatanStatus.error && (
                   <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
                     {penempatanStatus.error}
+                  </div>
+                )}
+
+                {activeKey === "izinPengajar" && izinStatus.error && (
+                  <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
+                    {izinStatus.error}
                   </div>
                 )}
 
@@ -3981,6 +4312,14 @@ export function App() {
                     onAdd={() => handleOpenPenempatanModal()}
                     onEdit={handleOpenPenempatanModal}
                     onDelete={handleDeletePenempatanPengajar}
+                  />
+                ) : activeKey === "izinPengajar" ? (
+                  <IzinPengajarView
+                    loading={izinStatus.loading}
+                    records={filteredIzinRecords}
+                    onAdd={() => handleOpenIzinModal()}
+                    onEdit={handleOpenIzinModal}
+                    onDelete={handleDeleteIzinPengajar}
                   />
                 ) : activeKey === "permintaanPengajarAntarCabang" ? (
                   <PermintaanPengajarView
@@ -4115,8 +4454,24 @@ export function App() {
           setIsPenempatanModalOpen(false);
           setPenempatanError("");
         }}
-        onDraftChange={setPenempatanDraft}
+        onDraftChange={handlePenempatanDraftChange}
         onSave={handleSavePenempatanPengajar}
+      />
+
+      <IzinPengajarModal
+        isOpen={isIzinModalOpen}
+        isEditing={Boolean(editingIzinId)}
+        loading={izinStatus.loading}
+        error={izinError}
+        draft={izinDraft}
+        pengajarOptions={pengajarIzinOptions}
+        isDomisiliLocked={Boolean(restrictedCabang)}
+        onClose={() => {
+          setIsIzinModalOpen(false);
+          setIzinError("");
+        }}
+        onDraftChange={setIzinDraft}
+        onSave={handleSaveIzinPengajar}
       />
 
       <PermintaanPengajarModal
@@ -4181,6 +4536,7 @@ export function App() {
             clearEditing();
             setIsClassModalOpen(false);
             setIsPenempatanModalOpen(false);
+            setIsIzinModalOpen(false);
             setIsPermintaanModalOpen(false);
           }}
         />

@@ -12,6 +12,7 @@ const bucketTableMap = {
   pengajar: "pengajar",
   surat_tugas: "surat_tugas_pengajar",
   penempatan_pengajar: "penempatan_pengajar",
+  izin_pengajar: "izin_pengajar",
   permintaan_pengajar: "permintaan_pengajar_antar_cabang",
 } as const;
 
@@ -173,6 +174,26 @@ const schemas: Record<BucketName, BucketSchema> = {
       jam_mulai: asString(data["Jam Mulai"]),
       jam_selesai: asString(data["Jam Selesai"]),
       cabang_penempatan: asString(data["Cabang Penempatan"]),
+    }),
+  },
+  izin_pengajar: {
+    table: bucketTableMap.izin_pengajar,
+    fromDb: (row) => ({
+      ID: asString(row.id),
+      "Kode Pengajar": asString(row.kode_pengajar),
+      "Nama Pengajar": asString(row.nama_pengajar),
+      Domisili: asString(row.domisili),
+      "Tanggal Mulai": asString(row.tanggal_mulai),
+      "Tanggal Selesai": asString(row.tanggal_selesai),
+      Keterangan: asString(row.keterangan),
+    }),
+    toDb: (data) => ({
+      kode_pengajar: asString(data["Kode Pengajar"]),
+      nama_pengajar: asString(data["Nama Pengajar"]),
+      domisili: asString(data.Domisili),
+      tanggal_mulai: asString(data["Tanggal Mulai"]),
+      tanggal_selesai: asString(data["Tanggal Selesai"]),
+      keterangan: asString(data.Keterangan),
     }),
   },
   permintaan_pengajar: {

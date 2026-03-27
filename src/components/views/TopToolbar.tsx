@@ -18,6 +18,7 @@ type TopToolbarProps = {
   pengajarStatus: StatusState;
   suratTugasStatus: StatusState;
   penempatanStatus: StatusState;
+  izinStatus: StatusState;
   permintaanStatus: StatusState;
   onQueryChange: (value: string) => void;
   onScheduleCabangChange: (value: string) => void;
@@ -43,6 +44,7 @@ export function TopToolbar({
   pengajarStatus,
   suratTugasStatus,
   penempatanStatus,
+  izinStatus,
   permintaanStatus,
   onQueryChange,
   onScheduleCabangChange,
@@ -143,6 +145,9 @@ export function TopToolbar({
         )}
         {activeKey === "penempatanPengajar" && penempatanStatus.lastSync && (
           <span className="text-muted small">Terakhir sinkron: {penempatanStatus.lastSync}</span>
+        )}
+        {activeKey === "izinPengajar" && izinStatus.lastSync && (
+          <span className="text-muted small">Terakhir sinkron: {izinStatus.lastSync}</span>
         )}
         {activeKey === "permintaanPengajarAntarCabang" && permintaanStatus.lastSync && (
           <span className="text-muted small">Terakhir sinkron: {permintaanStatus.lastSync}</span>

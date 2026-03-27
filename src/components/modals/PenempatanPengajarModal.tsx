@@ -100,12 +100,11 @@ export function PenempatanPengajarModal({
               placeholder="Pilih pengajar"
               onChange={(option) => {
                 const selected = option?.value || "";
-                const selectedLabel = option?.label || "";
-                const [kode, ...labelParts] = selectedLabel.split(" - ");
                 onDraftChange({
                   ...draft,
                   kodePengajar: selected,
-                  namaPengajar: selected ? labelParts.join(" - ") || kode : "",
+                  namaPengajar: selected ? draft.namaPengajar : "",
+                  domisili: selected ? draft.domisili : "",
                 });
               }}
             />

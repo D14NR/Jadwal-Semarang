@@ -88,6 +88,13 @@ export const categories: CategoryConfig[] = [
     fields: [],
   },
   {
+    key: "izinPengajar",
+    name: "Izin Pengajar",
+    icon: "bi-calendar-x",
+    description: "",
+    fields: [],
+  },
+  {
     key: "permintaanPengajarAntarCabang",
     name: "Permintaan Pengajar Antar Cabang",
     icon: "bi-arrow-left-right",
