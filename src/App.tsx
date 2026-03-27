@@ -2235,7 +2235,8 @@ export function App() {
     const startDate = parseFlexibleDate(record["Tanggal Mulai"] || "");
     const endDate = parseFlexibleDate(record["Tanggal Selesai"] || "");
     return {
-      _id: record.ID || record.Id || record.id || "",
+      // Keep encoded row id from database for reliable update/delete.
+      _id: record._id || record.ID || record.Id || record.id || "",
       "Kode Pengajar": (record["Kode Pengajar"] || "").trim().toLowerCase(),
       "Nama Pengajar": record["Nama Pengajar"] || record.Nama || "",
       Domisili: restrictedCabang || record.Domisili || "",
@@ -2250,7 +2251,7 @@ export function App() {
     try {
       const rows = await listRows(dataBucket["Izin Pengajar"]);
       const normalized = rows
-        .map((row) => toRecord(row))
+        .map((row) => ({ ...toRecord(row), _id: row.id }))
         .map((record) => normalizeIzinRecord(record))
         .filter((record) =>
           restrictedCabang
