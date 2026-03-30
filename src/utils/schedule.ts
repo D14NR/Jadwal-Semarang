@@ -118,39 +118,31 @@ export const formatSessionParts = (value: string) => {
 export const buildMonthScheduleDates = (baseDate: Date = new Date()) => {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
-  const lastOfMonth = new Date(year, month + 1, 0);
-  const diffToMonday = (8 - firstOfMonth.getDay()) % 7;
-  const firstMonday = new Date(year, month, 1 + diffToMonday);
-  const diffToSunday = (7 - lastOfMonth.getDay()) % 7;
-  const endSunday = new Date(year, month, lastOfMonth.getDate() + diffToSunday);
-  const dayCount =
-    Math.round((endSunday.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const weeks = Math.ceil(dayCount / 7);
+  const dayOrder = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+  const dayBuckets = dayOrder.map((label) => ({ label, dates: [] as Date[] }));
 
-  const scheduleDates: { date: string; label: string }[] = [];
-  for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
-    for (let weekIndex = 0; weekIndex < weeks; weekIndex += 1) {
-      const date = new Date(firstMonday);
-      date.setDate(firstMonday.getDate() + dayOffset + weekIndex * 7);
-      scheduleDates.push({
-        date: formatLocalDate(date),
-        label: formatScheduleLabel(date),
-      });
-    }
+  for (const cursor = new Date(year, month, 1); cursor.getMonth() === month; cursor.setDate(cursor.getDate() + 1)) {
+    const weekdayIndex = (cursor.getDay() + 6) % 7;
+    dayBuckets[weekdayIndex].dates.push(new Date(cursor));
   }
 
-  const dayGroups = [
-    { label: "Senin", count: weeks },
-    { label: "Selasa", count: weeks },
-    { label: "Rabu", count: weeks },
-    { label: "Kamis", count: weeks },
-    { label: "Jumat", count: weeks },
-    { label: "Sabtu", count: weeks },
-    { label: "Minggu", count: weeks },
-  ];
+  const scheduleDates = dayBuckets.flatMap((bucket) =>
+    bucket.dates.map((date) => ({
+      date: formatLocalDate(date),
+      label: formatScheduleLabel(date),
+    }))
+  );
 
-  return { scheduleDates, dayGroups, columnsPerDay: weeks };
+  const dayGroups = dayBuckets.map((bucket) => ({
+    label: bucket.label,
+    count: bucket.dates.length,
+  }));
+
+  return {
+    scheduleDates,
+    dayGroups,
+    columnsPerDay: Math.max(...dayGroups.map((group) => group.count), 0),
+  };
 };
 
 export const buildRollingScheduleDates = (

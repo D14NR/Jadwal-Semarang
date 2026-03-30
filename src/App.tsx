@@ -65,6 +65,10 @@ import {
 } from "./lib/database";
 
 export function App() {
+  const MONTH_WINDOW = 2;
+  const getMonthKey = (date: Date) =>
+    formatLocalDate(new Date(date.getFullYear(), date.getMonth(), 1)).slice(0, 7);
+
   const scheduleSheetByKey = {
     bulanIni: "Jadwal Bulan ini",
     jadwalTambahanPelayanan: "Jadwal Khusus",
@@ -230,8 +234,9 @@ export function App() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
+  const [monthAnchor, setMonthAnchor] = useState(() => new Date());
   const [selectedMonthKey, setSelectedMonthKey] = useState(() =>
-    formatLocalDate(new Date()).slice(0, 7)
+    getMonthKey(new Date())
   );
   const [printScheduleType, setPrintScheduleType] = useState<"reguler" | "tambahan">("reguler");
   const [printSelectedClassKey, setPrintSelectedClassKey] = useState("");
@@ -240,7 +245,7 @@ export function App() {
   const [deleteScheduleType, setDeleteScheduleType] = useState<"bulanIni" | "jadwalTambahanPelayanan">(
     "bulanIni"
   );
-  const [deleteMonthKey, setDeleteMonthKey] = useState(() => formatLocalDate(new Date()).slice(0, 7));
+  const [deleteMonthKey, setDeleteMonthKey] = useState(() => getMonthKey(new Date()));
   const [isDeletingByMonth, setIsDeletingByMonth] = useState(false);
   const [scheduleCabangView, setScheduleCabangView] = useState<Record<ScheduleMenuKey, string>>({
     bulanIni: "",
@@ -627,18 +632,48 @@ export function App() {
   };
 
   const monthOptions = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    return Array.from({ length: 12 }, (_, index) => {
-      const date = new Date(currentYear, index, 1);
+    return Array.from({ length: MONTH_WINDOW * 2 + 1 }, (_, index) => {
+      const offset = index - MONTH_WINDOW;
+      const date = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + offset, 1);
       return {
-        value: formatLocalDate(date).slice(0, 7),
+        value: getMonthKey(date),
         label: date.toLocaleDateString("id-ID", {
           month: "long",
           year: "numeric",
         }),
       };
     });
+  }, [monthAnchor]);
+
+  useEffect(() => {
+    const syncMonthAnchor = () => {
+      const now = new Date();
+      const nowKey = getMonthKey(now);
+      setMonthAnchor((prev) => (getMonthKey(prev) === nowKey ? prev : new Date(now.getFullYear(), now.getMonth(), 1)));
+    };
+
+    syncMonthAnchor();
+    const intervalId = window.setInterval(syncMonthAnchor, 60 * 60 * 1000);
+    return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    const availableMonthKeys = new Set(monthOptions.map((option) => option.value));
+    const currentMonthKey = getMonthKey(new Date());
+
+    if (!availableMonthKeys.has(selectedMonthKey)) {
+      setSelectedMonthKey(currentMonthKey);
+    }
+
+    if (!availableMonthKeys.has(deleteMonthKey)) {
+      setDeleteMonthKey(currentMonthKey);
+    }
+
+    if (selectedSuratTugasMonthKey && !availableMonthKeys.has(selectedSuratTugasMonthKey)) {
+      setSelectedSuratTugasMonthKey("");
+      setSelectedSuratTugasKode("");
+    }
+  }, [deleteMonthKey, monthOptions, selectedMonthKey, selectedSuratTugasMonthKey]);
 
   const selectedMonth = useMemo(() => {
     const [year, month] = selectedMonthKey.split("-").map(Number);
@@ -690,11 +725,13 @@ export function App() {
       return { dayRows: [], dateKeys: new Set<string>() };
     }
     const { scheduleDates, dayGroups: suratDayGroups } = buildMonthScheduleDates(selectedSuratTugasMonthDate);
-    const dayRows = suratDayGroups.map((group, dayIndex) => {
-      const startIndex = dayIndex * group.count;
+    let offset = 0;
+    const dayRows = suratDayGroups.map((group) => {
+      const dates = scheduleDates.slice(offset, offset + group.count);
+      offset += group.count;
       return {
         dayLabel: group.label.toUpperCase(),
-        dates: scheduleDates.slice(startIndex, startIndex + group.count),
+        dates,
       };
     });
     const dateKeys = new Set(scheduleDates.map((slot) => slot.date));
