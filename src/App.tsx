@@ -177,7 +177,8 @@ export function App() {
   const createAvailabilityList = (
     defaultStart = "",
     defaultEnd = "",
-    enabledDays: string[] = []
+    enabledDays: string[] = [],
+    defaultCabangList: string[] = []
   ) => {
     const enabledSet = new Set(
       enabledDays.map((day) => {
@@ -192,6 +193,7 @@ export function App() {
       enabled: enabledSet.has(hari),
       jamMulai: defaultStart,
       jamSelesai: defaultEnd,
+      cabangList: [...defaultCabangList],
     }));
   };
   const [penempatanDraft, setPenempatanDraft] = useState<PenempatanDraft>({
@@ -199,7 +201,6 @@ export function App() {
     namaPengajar: "",
     domisili: "",
     availabilityList: createAvailabilityList(),
-    cabangList: [],
   });
   const [penempatanOldRecord, setPenempatanOldRecord] = useState<Record<string, string> | null>(null);
   const [penempatanError, setPenempatanError] = useState("");
@@ -2096,15 +2097,31 @@ export function App() {
       );
       const sourceRecords = relatedRecords.length > 0 ? relatedRecords : [record];
 
-      const availabilityByDay = new Map<string, { jamMulai: string; jamSelesai: string }>();
-      const cabangSet = new Set<string>();
+      const availabilityByDay = new Map<
+        string,
+        { jamMulai: string; jamSelesai: string; cabangSet: Set<string> }
+      >();
       sourceRecords.forEach((item) => {
-        parseCabangPenempatan(item["Cabang Penempatan"] || "").forEach((cabang) => cabangSet.add(cabang));
+        const cabangByRow = parseCabangPenempatan(item["Cabang Penempatan"] || "");
         const jamMulai = formatTimeHHMM(item["Jam Mulai"] || "");
         const jamSelesai = formatTimeHHMM(item["Jam Selesai"] || "");
         parseHariPenempatan(item["Hari"] || "").forEach((hari) => {
-          if (!availabilityByDay.has(hari)) {
-            availabilityByDay.set(hari, { jamMulai, jamSelesai });
+          const existing = availabilityByDay.get(hari);
+          if (!existing) {
+            availabilityByDay.set(hari, {
+              jamMulai,
+              jamSelesai,
+              cabangSet: new Set(cabangByRow),
+            });
+            return;
+          }
+
+          cabangByRow.forEach((cabang) => existing.cabangSet.add(cabang));
+          if (!existing.jamMulai && jamMulai) {
+            existing.jamMulai = jamMulai;
+          }
+          if (!existing.jamSelesai && jamSelesai) {
+            existing.jamSelesai = jamSelesai;
           }
         });
       });
@@ -2116,6 +2133,7 @@ export function App() {
           enabled: Boolean(value),
           jamMulai: value?.jamMulai || "",
           jamSelesai: value?.jamSelesai || "",
+          cabangList: value ? Array.from(value.cabangSet) : [],
         };
       });
 
@@ -2125,7 +2143,6 @@ export function App() {
           record["Nama Pengajar"] || sourceRecords.find((item) => item["Nama Pengajar"] || "")?.["Nama Pengajar"] || "",
         domisili: restrictedCabang || record["Domisili"] || sourceRecords[0]?.["Domisili"] || "",
         availabilityList,
-        cabangList: Array.from(cabangSet),
       });
       setPenempatanOldRecord(record);
     } else {
@@ -2133,8 +2150,7 @@ export function App() {
         kodePengajar: "",
         namaPengajar: "",
         domisili: restrictedCabang || "",
-        availabilityList: createAvailabilityList(),
-        cabangList: restrictedCabang ? [restrictedCabang] : [],
+        availabilityList: createAvailabilityList("", "", [], restrictedCabang ? [restrictedCabang] : []),
       });
       setPenempatanOldRecord(null);
     }
@@ -2148,7 +2164,6 @@ export function App() {
       return;
     }
 
-    const uniqueCabang = Array.from(new Set(penempatanDraft.cabangList));
     const selectedAvailabilities = penempatanDraft.availabilityList
       .filter((item) => item.enabled)
       .map((item) => ({
@@ -2156,6 +2171,13 @@ export function App() {
         hari: titleCase(item.hari),
         jamMulai: item.jamMulai.trim(),
         jamSelesai: item.jamSelesai.trim(),
+        cabangList: Array.from(
+          new Set(
+            (restrictedCabang ? [restrictedCabang] : item.cabangList)
+              .map((cabang) => cabang.trim())
+              .filter(Boolean)
+          )
+        ),
       }));
 
     const draftValue = {
@@ -2164,7 +2186,6 @@ export function App() {
       namaPengajar: penempatanDraft.namaPengajar.trim(),
       domisili: (restrictedCabang || penempatanDraft.domisili).trim(),
       availabilityList: selectedAvailabilities,
-      cabangList: uniqueCabang,
     };
 
     if (!draftValue.kodePengajar || !draftValue.namaPengajar) {
@@ -2192,8 +2213,11 @@ export function App() {
       setPenempatanError(`Jam mulai harus lebih awal dari jam selesai untuk hari ${invalidOrder.hari}.`);
       return;
     }
-    if (draftValue.cabangList.length === 0) {
-      setPenempatanError("Pilih minimal satu cabang penempatan.");
+    const missingCabangAvailability = draftValue.availabilityList.find(
+      (item) => item.cabangList.length === 0
+    );
+    if (missingCabangAvailability) {
+      setPenempatanError(`Pilih minimal satu cabang penempatan untuk hari ${missingCabangAvailability.hari}.`);
       return;
     }
 
@@ -2204,7 +2228,7 @@ export function App() {
       Hari: item.hari,
       "Jam Mulai": item.jamMulai,
       "Jam Selesai": item.jamSelesai,
-      "Cabang Penempatan": draftValue.cabangList.join(", "),
+      "Cabang Penempatan": item.cabangList.join(", "),
     }));
 
     setPenempatanStatus((prev) => ({ ...prev, loading: true, error: "" }));

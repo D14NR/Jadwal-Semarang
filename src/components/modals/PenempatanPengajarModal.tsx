@@ -10,8 +10,8 @@ export type PenempatanDraft = {
     enabled: boolean;
     jamMulai: string;
     jamSelesai: string;
+    cabangList: string[];
   }[];
-  cabangList: string[];
 };
 
 type PenempatanPengajarModalProps = {
@@ -59,8 +59,6 @@ export function PenempatanPengajarModal({
   }
 
   const allDaysSelected = enabledDayCount(draft) === hariOptions.length;
-  const allCabangSelected =
-    cabangOptions.length > 0 && cabangOptions.every((cabang) => draft.cabangList.includes(cabang));
   const selectedAvailabilities = draft.availabilityList.filter((item) => item.enabled);
   const isAllDayTime =
     selectedAvailabilities.length > 0 &&
@@ -123,7 +121,7 @@ export function PenempatanPengajarModal({
 
           <div className="col-12">
             <label className="form-label small fw-semibold">Hari Tersedia</label>
-            <div className="mb-2">
+            <div className="mb-2 d-flex flex-wrap gap-3 align-items-center">
               <label className="form-check form-check-inline m-0">
                 <input
                   className="form-check-input"
@@ -142,6 +140,32 @@ export function PenempatanPengajarModal({
                 />
                 <span className="form-check-label fw-semibold">Semua Hari</span>
               </label>
+
+              <label className="form-check form-check-inline m-0">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={isAllDayTime}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      onDraftChange({
+                        ...draft,
+                        availabilityList: draft.availabilityList.map((entry) =>
+                          entry.enabled ? { ...entry, jamMulai: "00:00", jamSelesai: "23:59" } : entry
+                        ),
+                      });
+                    } else {
+                      onDraftChange({
+                        ...draft,
+                        availabilityList: draft.availabilityList.map((entry) =>
+                          entry.enabled ? { ...entry, jamMulai: "", jamSelesai: "" } : entry
+                        ),
+                      });
+                    }
+                  }}
+                />
+                <span className="form-check-label fw-semibold">Semua Jam</span>
+              </label>
             </div>
             <div className="table-responsive border rounded">
               <table className="table table-sm align-middle mb-0">
@@ -151,6 +175,7 @@ export function PenempatanPengajarModal({
                     <th>Hari</th>
                     <th style={{ width: 160 }}>Jam Mulai</th>
                     <th style={{ width: 160 }}>Jam Selesai</th>
+                    <th style={{ minWidth: 260 }}>Cabang Penempatan</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -206,6 +231,39 @@ export function PenempatanPengajarModal({
                           }}
                         />
                       </td>
+                      <td>
+                        <div className="d-flex flex-wrap gap-2">
+                          {cabangOptions.map((cabang) => {
+                            const checked = item.cabangList.includes(cabang);
+                            return (
+                              <label key={`${item.hari}-${cabang}`} className="form-check form-check-inline m-0">
+                                <input
+                                  className="form-check-input"
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={!item.enabled}
+                                  onChange={(event) => {
+                                    const nextAvailability = draft.availabilityList.map((entry) => {
+                                      if (entry.hari !== item.hari) {
+                                        return entry;
+                                      }
+                                      const nextCabang = event.target.checked
+                                        ? Array.from(new Set([...entry.cabangList, cabang]))
+                                        : entry.cabangList.filter((entryCabang) => entryCabang !== cabang);
+                                      return {
+                                        ...entry,
+                                        cabangList: nextCabang,
+                                      };
+                                    });
+                                    onDraftChange({ ...draft, availabilityList: nextAvailability });
+                                  }}
+                                />
+                                <span className="form-check-label">{cabang}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -217,74 +275,7 @@ export function PenempatanPengajarModal({
           </div>
 
           <div className="col-12">
-            <div className="mt-1">
-              <label className="form-check form-check-inline m-0">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={isAllDayTime}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      onDraftChange({
-                        ...draft,
-                        availabilityList: draft.availabilityList.map((entry) =>
-                          entry.enabled ? { ...entry, jamMulai: "00:00", jamSelesai: "23:59" } : entry
-                        ),
-                      });
-                    } else {
-                      onDraftChange({
-                        ...draft,
-                        availabilityList: draft.availabilityList.map((entry) =>
-                          entry.enabled ? { ...entry, jamMulai: "", jamSelesai: "" } : entry
-                        ),
-                      });
-                    }
-                  }}
-                />
-                <span className="form-check-label fw-semibold">Semua Jam</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="col-12">
-            <label className="form-label small fw-semibold">Cabang Penempatan</label>
-            <div className="mb-2">
-              <label className="form-check form-check-inline m-0">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={allCabangSelected}
-                  onChange={(event) => {
-                    onDraftChange({
-                      ...draft,
-                      cabangList: event.target.checked ? [...cabangOptions] : [],
-                    });
-                  }}
-                />
-                <span className="form-check-label fw-semibold">Semua Cabang</span>
-              </label>
-            </div>
-            <div className="d-flex flex-wrap gap-2">
-              {cabangOptions.map((cabang) => {
-                const checked = draft.cabangList.includes(cabang);
-                return (
-                  <label key={cabang} className="form-check form-check-inline m-0">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        const nextCabang = event.target.checked
-                          ? [...draft.cabangList, cabang]
-                          : draft.cabangList.filter((item) => item !== cabang);
-                        onDraftChange({ ...draft, cabangList: nextCabang });
-                      }}
-                    />
-                    <span className="form-check-label">{cabang}</span>
-                  </label>
-                );
-              })}
-            </div>
+            <div className="text-muted small">Pilih cabang penempatan pada setiap baris hari yang diaktifkan.</div>
           </div>
         </div>
 
