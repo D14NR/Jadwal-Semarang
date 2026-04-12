@@ -94,7 +94,10 @@ export function DashboardView({
                 </td>
               </tr>
             ) : (
-              izinRequests.map((item) => (
+              izinRequests.map((item) => {
+                const normalizedStatus = (item.status || "Menunggu").trim().toLowerCase();
+                const canShowAction = canManageIzin && normalizedStatus === "menunggu";
+                return (
                 <tr key={item.id}>
                   <td>{item.namaPengajar || "-"}</td>
                   <td>{item.domisili || "-"}</td>
@@ -104,9 +107,9 @@ export function DashboardView({
                   <td>
                     <span
                       className={`badge ${
-                        item.status.toLowerCase() === "disetujui"
+                        normalizedStatus === "disetujui"
                           ? "text-bg-success"
-                          : item.status.toLowerCase() === "ditolak"
+                          : normalizedStatus === "ditolak"
                             ? "text-bg-danger"
                             : "text-bg-warning"
                       }`}
@@ -117,7 +120,7 @@ export function DashboardView({
                   <td>{item.diputuskanOleh || "-"}</td>
                   <td>{item.diputuskanPada || "-"}</td>
                   <td>
-                    {canManageIzin ? (
+                    {canShowAction ? (
                       <div className="d-flex justify-content-center gap-2">
                         <button
                           type="button"
@@ -139,7 +142,8 @@ export function DashboardView({
                     )}
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
