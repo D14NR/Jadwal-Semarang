@@ -129,9 +129,21 @@ create table if not exists public.izin_pengajar (
   tanggal_mulai text not null,
   tanggal_selesai text not null,
   keterangan text not null default '',
+  keterangan_status text not null default 'Menunggu',
+  diputuskan_oleh text not null default '',
+  diputuskan_pada text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.izin_pengajar
+  add column if not exists keterangan_status text not null default 'Menunggu';
+
+alter table public.izin_pengajar
+  add column if not exists diputuskan_oleh text not null default '';
+
+alter table public.izin_pengajar
+  add column if not exists diputuskan_pada text not null default '';
 
 create table if not exists public.permintaan_pengajar_antar_cabang (
   id uuid primary key default gen_random_uuid(),

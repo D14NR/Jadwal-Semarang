@@ -13,6 +13,9 @@ const izinHeaders = [
   "Tanggal Mulai",
   "Tanggal Selesai",
   "Keterangan",
+  "Keterangan Status",
+  "Diputuskan Oleh",
+  "Diputuskan Pada",
 ];
 
 export function IzinPengajarView({

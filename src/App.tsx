@@ -1498,6 +1498,62 @@ export function App() {
       }));
   }, [records.bulanIni, records.jadwalTambahanPelayanan, restrictedCabang]);
 
+  const dashboardIzinRequests = useMemo(() => {
+    return filteredIzinRecords
+      .map((record, index) => {
+        const status =
+          (record["Keterangan Status"] || record.Status || "Menunggu").trim() || "Menunggu";
+        return {
+          id: record._id || `${record["Kode Pengajar"] || "izin"}-${index}`,
+          namaPengajar: record["Nama Pengajar"] || "",
+          domisili: record.Domisili || "",
+          tanggalMulai: record["Tanggal Mulai"] || "",
+          tanggalSelesai: record["Tanggal Selesai"] || "",
+          keterangan: record.Keterangan || "",
+          status,
+          diputuskanOleh: record["Diputuskan Oleh"] || "",
+          diputuskanPada: record["Diputuskan Pada"] || "",
+        };
+      })
+      .sort((a, b) => {
+        const aDate = parseFlexibleDate(a.tanggalMulai)?.getTime() || Number.MAX_SAFE_INTEGER;
+        const bDate = parseFlexibleDate(b.tanggalMulai)?.getTime() || Number.MAX_SAFE_INTEGER;
+        return aDate - bDate;
+      });
+  }, [filteredIzinRecords]);
+
+  const handleUpdateIzinStatus = async (
+    item: { id: string; namaPengajar: string },
+    status: "Disetujui" | "Ditolak"
+  ) => {
+    if (!item.id) {
+      pushToast("ID izin tidak ditemukan.", "error");
+      return;
+    }
+    setIzinStatus((prev) => ({ ...prev, loading: true, error: "" }));
+    try {
+      const selectedIzin = izinRecords.find((record) => record._id === item.id);
+      const decidedBy = authSession?.role === "admin" ? "Admin" : authSession?.cabang || "";
+      const decidedAt = new Date().toISOString();
+      await updateRow(item.id, {
+        ...(selectedIzin || {}),
+        "Keterangan Status": status,
+        Status: status,
+        "Diputuskan Oleh": decidedBy,
+        "Diputuskan Pada": decidedAt,
+      });
+      await handleLoadIzinPengajar();
+      pushToast(`Status izin ${item.namaPengajar || "pengajar"} diperbarui ke ${status}.`, "success");
+    } catch (error) {
+      setIzinStatus((prev) => ({
+        ...prev,
+        loading: false,
+        error: "Gagal memperbarui status izin.",
+      }));
+      pushToast("Gagal memperbarui status izin.", "error");
+    }
+  };
+
   const suratTugasRecordsByMonth = useMemo(() => {
     if (!selectedSuratTugasMonthKey) {
       return [];
@@ -2295,6 +2351,21 @@ export function App() {
   const normalizeIzinRecord = (record: Record<string, string>) => {
     const startDate = parseFlexibleDate(record["Tanggal Mulai"] || "");
     const endDate = parseFlexibleDate(record["Tanggal Selesai"] || "");
+    const decidedAtRaw =
+      record["Diputuskan Pada"] || record["diputuskan_pada"] || "";
+    const decidedAtDate = decidedAtRaw ? new Date(decidedAtRaw) : null;
+    const decidedAt =
+      decidedAtDate && !Number.isNaN(decidedAtDate.getTime())
+        ? decidedAtDate.toLocaleString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          })
+        : decidedAtRaw;
     return {
       // Keep encoded row id from database for reliable update/delete.
       _id: record._id || record.ID || record.Id || record.id || "",
@@ -2304,6 +2375,10 @@ export function App() {
       "Tanggal Mulai": startDate ? formatScheduleLabel(startDate) : "",
       "Tanggal Selesai": endDate ? formatScheduleLabel(endDate) : "",
       Keterangan: record.Keterangan || "",
+      "Keterangan Status": record["Keterangan Status"] || record.Status || "Menunggu",
+      "Diputuskan Oleh": record["Diputuskan Oleh"] || record["diputuskan_oleh"] || "",
+      "Diputuskan Pada": decidedAt,
+      "Diputuskan Pada Raw": decidedAtRaw,
     };
   };
 
@@ -2396,6 +2471,22 @@ export function App() {
       "Tanggal Mulai": formatScheduleLabel(startDate),
       "Tanggal Selesai": formatScheduleLabel(endDate),
       Keterangan: normalized.keterangan,
+      "Keterangan Status":
+        (editingIzinId
+          ? izinRecords.find((item) => item._id === editingIzinId)?.["Keterangan Status"]
+          : "") || "Menunggu",
+      "Diputuskan Oleh":
+        (editingIzinId
+          ? izinRecords.find((item) => item._id === editingIzinId)?.["Diputuskan Oleh"]
+          : "") || "",
+      "Diputuskan Pada":
+        (editingIzinId
+          ? izinRecords.find((item) => item._id === editingIzinId)?.["Diputuskan Pada"]
+          : "") || "",
+      "Diputuskan Pada Raw":
+        (editingIzinId
+          ? izinRecords.find((item) => item._id === editingIzinId)?.["Diputuskan Pada Raw"]
+          : "") || "",
     };
 
     setIzinStatus((prev) => ({ ...prev, loading: true, error: "" }));
@@ -3503,18 +3594,33 @@ export function App() {
   const rebuildSuratTugasBucket = async () => {
     const regulerRows = await listRows(dataBucket["Jadwal Bulan ini"]);
     const khususRows = await listRows(dataBucket["Jadwal Khusus"]);
-    const allRows = [...regulerRows, ...khususRows].map((row) => row.data);
-    const now = new Date();
-    const day = now.getDate();
-    const month = now
-      .toLocaleDateString("id-ID", { month: "long" })
-      .toLowerCase();
-    const year = now.getFullYear();
-    const time = now.toLocaleTimeString("en-GB", { hour12: false });
-    const updatedLabel = `${day} ${month} ${year} ${time}`;
+    const allRows = [...regulerRows, ...khususRows];
+
+    const formatUpdatedLabel = (value?: string) => {
+      if (!value) {
+        return "";
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return "";
+      }
+      const day = parsed.getDate();
+      const month = parsed
+        .toLocaleDateString("id-ID", { month: "long" })
+        .toLowerCase();
+      const year = parsed.getFullYear();
+      const time = parsed.toLocaleTimeString("en-GB", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      return `${day} ${month} ${year} ${time}`;
+    };
 
     const grouped = new Map<string, string[]>();
-    allRows.forEach((row) => {
+    allRows.forEach((rowItem) => {
+      const row = rowItem.data;
       const kodePengajar = (row.Pengajar || "").trim();
       const mapel = (row.Mapel || "").trim();
       const waktu = (row.Waktu || "").trim();
@@ -3526,7 +3632,10 @@ export function App() {
         return;
       }
       const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
-      const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang} update ${updatedLabel}`;
+      const updatedLabel = formatUpdatedLabel(rowItem.updatedAt || rowItem.createdAt);
+      const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}${
+        updatedLabel ? ` update ${updatedLabel}` : ""
+      }`;
       const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
       const list = grouped.get(key) ?? [];
       list.push(sesiText);
@@ -3536,13 +3645,13 @@ export function App() {
     const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
       const [kodeKey, tanggalKey] = key.split("||");
       const template = allRows.find(
-        (row) =>
-          normalizeValueKey(row.Pengajar) === kodeKey &&
-          normalizeValueKey(formatSheetTanggal(row.Tanggal || "")) === tanggalKey
+        (rowItem) =>
+          normalizeValueKey(rowItem.data.Pengajar) === kodeKey &&
+          normalizeValueKey(formatSheetTanggal(rowItem.data.Tanggal || "")) === tanggalKey
       );
-      const tanggalLabel = template ? formatSheetTanggal(template.Tanggal || "") : "";
+      const tanggalLabel = template ? formatSheetTanggal(template.data.Tanggal || "") : "";
       const row: Record<string, string> = {
-        "Kode Pengajar": template?.Pengajar || "",
+        "Kode Pengajar": template?.data.Pengajar || "",
         Tanggal: tanggalLabel,
       };
       for (let index = 0; index < 10; index += 1) {
@@ -4280,9 +4389,9 @@ export function App() {
                     {sheetStatus.error}
                   </div>
                 )}
-                {activeKey === "dashboard" && permintaanStatus.error && (
+                {activeKey === "dashboard" && (permintaanStatus.error || izinStatus.error) && (
                   <div className="alert alert-danger py-2 text-xs mt-3" role="alert">
-                    {permintaanStatus.error}
+                    {[permintaanStatus.error, izinStatus.error].filter(Boolean).join(" ")}
                   </div>
                 )}
                 {activeKey === "mataPelajaran" && mapelStatus.error && (
@@ -4323,9 +4432,13 @@ export function App() {
 
                 {activeKey === "dashboard" ? (
                   <DashboardView
-                    loading={sheetStatus.loading || permintaanStatus.loading}
+                    loading={sheetStatus.loading || permintaanStatus.loading || izinStatus.loading}
                     pendingRequests={dashboardPendingRequests}
                     todaySchedules={dashboardTodaySchedules}
+                    izinRequests={dashboardIzinRequests}
+                    canManageIzin={Boolean(authSession)}
+                    onApproveIzin={(item) => handleUpdateIzinStatus(item, "Disetujui")}
+                    onRejectIzin={(item) => handleUpdateIzinStatus(item, "Ditolak")}
                   />
                 ) : activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan" ? (
                   <ScheduleTableView

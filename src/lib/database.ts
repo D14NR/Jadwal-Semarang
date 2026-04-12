@@ -3,6 +3,8 @@ import { supabase } from "./supabase";
 export type DbRow = {
   id: string;
   data: Record<string, string>;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 const bucketTableMap = {
@@ -41,6 +43,21 @@ const asString = (value: unknown) =>
 const asNumberOrNull = (value: unknown) => {
   const parsed = Number(String(value ?? "").trim());
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const asTimestampOrNull = (value: unknown) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return null;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
 };
 
 const schemas: Record<BucketName, BucketSchema> = {
@@ -186,6 +203,9 @@ const schemas: Record<BucketName, BucketSchema> = {
       "Tanggal Mulai": asString(row.tanggal_mulai),
       "Tanggal Selesai": asString(row.tanggal_selesai),
       Keterangan: asString(row.keterangan),
+      "Keterangan Status": asString(row.keterangan_status ?? row.status),
+      "Diputuskan Oleh": asString(row.diputuskan_oleh),
+      "Diputuskan Pada": asString(row.diputuskan_pada),
     }),
     toDb: (data) => ({
       kode_pengajar: asString(data["Kode Pengajar"]),
@@ -194,6 +214,11 @@ const schemas: Record<BucketName, BucketSchema> = {
       tanggal_mulai: asString(data["Tanggal Mulai"]),
       tanggal_selesai: asString(data["Tanggal Selesai"]),
       keterangan: asString(data.Keterangan),
+      keterangan_status: asString(data["Keterangan Status"] || data.Status || "Menunggu"),
+      diputuskan_oleh: asString(data["Diputuskan Oleh"]),
+      diputuskan_pada: asTimestampOrNull(
+        data["Diputuskan Pada Raw"] || data["Diputuskan Pada"]
+      ),
     }),
   },
   permintaan_pengajar: {
@@ -261,6 +286,8 @@ export const listRows = async (bucket: string) => {
   return (data || []).map((row) => ({
     id: encodeId(bucket, String(row.id || "")),
     data: normalizeData(schema.fromDb(row as Record<string, unknown>)),
+    createdAt: asString((row as Record<string, unknown>).created_at),
+    updatedAt: asString((row as Record<string, unknown>).updated_at),
   })) as DbRow[];
 };
 
@@ -288,9 +315,24 @@ export const insertRow = async (bucket: string, data: Record<string, string>) =>
 export const updateRow = async (id: string, data: Record<string, string>) => {
   const { bucket, id: rawId } = decodeId(id);
   const schema = schemas[bucket];
+  const { data: existing, error: existingError } = await supabase
+    .from(schema.table)
+    .select("*")
+    .eq("id", rawId)
+    .single();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const mergedInput = {
+    ...normalizeData(schema.fromDb(existing as Record<string, unknown>)),
+    ...normalizeData(data),
+  };
+
   const { data: updated, error } = await supabase
     .from(schema.table)
-    .update(schema.toDb(data))
+    .update(schema.toDb(mergedInput))
     .eq("id", rawId)
     .select("*")
     .single();

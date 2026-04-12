@@ -17,13 +17,37 @@ type DashboardScheduleItem = {
   sourceLabel: string;
 };
 
+type DashboardIzinItem = {
+  id: string;
+  namaPengajar: string;
+  domisili: string;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+  keterangan: string;
+  status: string;
+  diputuskanOleh: string;
+  diputuskanPada: string;
+};
+
 type DashboardViewProps = {
   loading: boolean;
   pendingRequests: DashboardRequestItem[];
   todaySchedules: DashboardScheduleItem[];
+  izinRequests: DashboardIzinItem[];
+  canManageIzin: boolean;
+  onApproveIzin: (item: DashboardIzinItem) => void;
+  onRejectIzin: (item: DashboardIzinItem) => void;
 };
 
-export function DashboardView({ loading, pendingRequests, todaySchedules }: DashboardViewProps) {
+export function DashboardView({
+  loading,
+  pendingRequests,
+  todaySchedules,
+  izinRequests,
+  canManageIzin,
+  onApproveIzin,
+  onRejectIzin,
+}: DashboardViewProps) {
   return (
     <div className="mt-3">
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -33,6 +57,92 @@ export function DashboardView({ loading, pendingRequests, todaySchedules }: Dash
         <span className="badge text-bg-primary-subtle border border-primary-subtle text-primary-emphasis px-3 py-2">
           Jadwal Hari Ini: {todaySchedules.length}
         </span>
+        <span className="badge text-bg-danger-subtle border border-danger-subtle text-danger-emphasis px-3 py-2">
+          Izin Pengajar: {izinRequests.length}
+        </span>
+      </div>
+
+      <h6 className="fw-semibold mb-2">Permintaan Izin Pengajar</h6>
+      <div className="table-responsive border rounded table-sticky-wrapper mb-4">
+        <table className="table table-sm table-bordered align-middle mb-0 table-sticky">
+          <thead className="table-light">
+            <tr>
+              <th>Nama Pengajar</th>
+              <th>Domisili</th>
+              <th>Tanggal Mulai</th>
+              <th>Tanggal Selesai</th>
+              <th>Keterangan Izin</th>
+              <th>Keterangan Status</th>
+              <th>Diputuskan Oleh</th>
+              <th>Diputuskan Pada</th>
+              <th className="text-center" style={{ width: 130 }}>
+                Aksi
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={9} className="text-center text-muted py-3">
+                  Memuat data dashboard...
+                </td>
+              </tr>
+            ) : izinRequests.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="text-center text-muted py-3">
+                  Tidak ada permintaan izin pengajar.
+                </td>
+              </tr>
+            ) : (
+              izinRequests.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.namaPengajar || "-"}</td>
+                  <td>{item.domisili || "-"}</td>
+                  <td>{item.tanggalMulai || "-"}</td>
+                  <td>{item.tanggalSelesai || "-"}</td>
+                  <td>{item.keterangan || "-"}</td>
+                  <td>
+                    <span
+                      className={`badge ${
+                        item.status.toLowerCase() === "disetujui"
+                          ? "text-bg-success"
+                          : item.status.toLowerCase() === "ditolak"
+                            ? "text-bg-danger"
+                            : "text-bg-warning"
+                      }`}
+                    >
+                      {item.status || "Menunggu"}
+                    </span>
+                  </td>
+                  <td>{item.diputuskanOleh || "-"}</td>
+                  <td>{item.diputuskanPada || "-"}</td>
+                  <td>
+                    {canManageIzin ? (
+                      <div className="d-flex justify-content-center gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-outline-success btn-sm"
+                          onClick={() => onApproveIzin(item)}
+                        >
+                          Setujui
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline-danger btn-sm"
+                          onClick={() => onRejectIzin(item)}
+                        >
+                          Tolak
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-muted">-</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       <h6 className="fw-semibold mb-2">Permintaan Pengajar Antar Cabang (Menunggu)</h6>
