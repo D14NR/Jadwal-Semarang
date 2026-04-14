@@ -192,6 +192,23 @@ export const formatTimeHHMM = (value: string) => {
     return "";
   }
 
+  // Excel time-only cells can be read as fractions of a day (for example 0.4166667 => 10:00).
+  const numericValue = Number(trimmed.replace(",", "."));
+  if (!Number.isNaN(numericValue) && Number.isFinite(numericValue)) {
+    if (numericValue >= 0 && numericValue < 24 && !trimmed.includes(":") && !trimmed.includes(".")) {
+      return `${String(Math.floor(numericValue)).padStart(2, "0")}:00`;
+    }
+
+    if (numericValue >= 0) {
+      const dayFraction = numericValue >= 1 ? numericValue - Math.floor(numericValue) : numericValue;
+      const minutesInDay = 24 * 60;
+      const totalMinutes = Math.round(dayFraction * minutesInDay) % minutesInDay;
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+    }
+  }
+
   const directMatch = trimmed.match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?$/);
   if (directMatch) {
     const hours = directMatch[1].padStart(2, "0");
