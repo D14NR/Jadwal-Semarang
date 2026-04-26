@@ -56,6 +56,11 @@ import {
   parseTimeValue,
 } from "./utils/schedule";
 import {
+  copyScheduleToNextMonth,
+  filterScheduleByMonth,
+  getNextMonthKey,
+} from "./utils/copySchedule";
+import {
   deleteRowsByIds,
   insertRow,
   listRows,
@@ -303,7 +308,7 @@ export function App() {
     if (!normalized) {
       return [] as string[];
     }
-    if (normalized === "semua hari") {
+    if (normalized === "semuahari") {
       return ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
     }
     return value
@@ -1243,6 +1248,32 @@ export function App() {
       };
     }
 
+    const pengajarRecord = pengajarByKode[pengajarKey];
+    let isDomiciled = pengajarRecord && normalizeText(pengajarRecord["Domisili"] || "") === normalizeText(editingSlot.cabang);
+    
+    // Jika tidak ditemukan di pengajarByKode, cari langsung di pengajarRecords dengan berbagai kemungkinan format
+    if (!isDomiciled) {
+      const foundRecord = pengajarRecords.find((record) => {
+        const kodePengajar = (record["Kode Pengajar"] || "").trim();
+        const inputPengajar = draft.pengajar.trim();
+        // Cek dengan exact match (case-insensitive)
+        if (normalizeText(kodePengajar) === normalizeText(inputPengajar)) {
+          const domisiliMatch = normalizeText(record["Domisili"] || "") === normalizeText(editingSlot.cabang);
+          if (domisiliMatch) {
+            return true;
+          }
+        }
+        return false;
+      });
+      if (foundRecord) {
+        isDomiciled = true;
+      }
+    }
+    
+    if (isDomiciled) {
+      return { warning: "", availableDateLabels };
+    }
+
     const penempatanByPengajar = penempatanRecords.filter(
       (record) => (record["Kode Pengajar"] || "").trim().toLowerCase() === pengajarKey
     );
@@ -1252,12 +1283,16 @@ export function App() {
       editingSlot.tanggal
     );
 
+    // Jika tidak ada penempatan dan tidak ada permintaan yang approved, tapi pengajar domisili di cabang ini, lanjutkan
     if (penempatanByPengajar.length === 0 && approvedByPengajar.length === 0) {
-      return {
-        warning:
-          "Pengajar belum memiliki data penempatan. Pengajar tidak tersedia di cabang ini, silakan hubungi cabang domisili.",
-        availableDateLabels,
-      };
+      if (!isDomiciled) {
+        return {
+          warning:
+            "Pengajar belum memiliki data penempatan. Pengajar tidak tersedia di cabang ini, silakan hubungi cabang domisili.",
+          availableDateLabels,
+        };
+      }
+      // Jika domisili, lanjutkan dan akan add record "semua hari" di bawah
     }
 
     const cabangMatchedRecords = penempatanByPengajar.filter((record) =>
@@ -1275,11 +1310,15 @@ export function App() {
     ];
 
     if (availabilityRecords.length === 0) {
-      return {
-        warning:
-          "Pengajar tidak tersedia di cabang ini, silakan hubungi cabang domisili.",
-        availableDateLabels,
-      };
+      if (isDomiciled) {
+        availabilityRecords.push({ "Cabang Penempatan": editingSlot.cabang, "Hari": "semua hari", "Jam Mulai": "", "Jam Selesai": "" });
+      } else {
+        return {
+          warning:
+            "Pengajar tidak tersedia di cabang ini, silakan hubungi cabang domisili.",
+          availableDateLabels,
+        };
+      }
     }
 
     const parsedDate = parseFlexibleDate(editingSlot.tanggal);
@@ -3196,7 +3235,7 @@ export function App() {
     }
     const refreshInterval = window.setInterval(() => {
       void refreshAllData();
-    }, 5 * 60 * 1000);
+    }, 60 * 60 * 1000);
     return () => {
       window.clearInterval(refreshInterval);
     };
@@ -3661,6 +3700,87 @@ export function App() {
     });
 
     await replaceBucketRows(dataBucket["Surat Tugas Pengajar"], suratRows);
+  };
+
+  const handleCopyScheduleToNextMonth = () => {
+    if (isScheduleReadOnly) {
+      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menyalin jadwal.", "error");
+      return;
+    }
+
+    const nextMonthKey = getNextMonthKey(selectedMonthKey);
+    const currentMonthRecords = filterScheduleByMonth(records[activeScheduleKey] ?? [], selectedMonthKey);
+
+    if (currentMonthRecords.length === 0) {
+      pushToast("Tidak ada jadwal untuk disalin dari bulan ini.", "info");
+      return;
+    }
+
+    openConfirmDialog(
+      `Salin jadwal dari bulan ini ke bulan ${new Date(Number(nextMonthKey.split("-")[0]), Number(nextMonthKey.split("-")[1]) - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}? Jadwal yang sudah ada di bulan tujuan tidak akan dihapus.`,
+      async () => {
+        try {
+          setSheetStatus((prev) => ({ ...prev, saving: true, error: "" }));
+
+          // Copy jadwal dengan menyesuaikan tanggal
+          const copiedRecords = copyScheduleToNextMonth(
+            currentMonthRecords,
+            selectedMonthKey,
+            nextMonthKey
+          );
+
+          if (copiedRecords.length === 0) {
+            pushToast("Tidak ada jadwal yang dapat disalin.", "info");
+            setSheetStatus((prev) => ({ ...prev, saving: false }));
+            return;
+          }
+
+          // Prepare sheet records (format untuk sheet)
+          const copiedSheetRecords = copiedRecords.map((record) => {
+            // Extract field values - handle both uppercase and lowercase field names
+            const cabang = (record.Cabang as string) || (record.cabang as string) || "";
+            const kelas = (record.Kelas as string) || (record.kelas as string) || "";
+            const tanggal = (record.Tanggal as string) || (record.tanggal as string) || "";
+            const mapel = (record.Mapel as string) || (record.mapel as string) || "";
+            const pengajar = (record.Pengajar as string) || (record.pengajar as string) || "";
+            const waktu = (record.Waktu as string) || (record.waktu as string) || "";
+            const sekolah = (record.Sekolah as string) || (record.sekolah as string) || "";
+            const classOrder = (record["Urutan Kelas"] as string) || (record.classOrder as string) || "";
+
+            return buildSheetRecord(
+              cabang,
+              kelas,
+              tanggal,
+              mapel,
+              pengajar,
+              waktu,
+              sekolah,
+              classOrder
+            );
+          });
+
+          // Save ke database dengan appendMany
+          await postToSheet(
+            { action: "appendMany", records: copiedSheetRecords },
+            activeScheduleKey
+          );
+
+          // Update local state
+          setRecords((prev) => ({
+            ...prev,
+            [activeScheduleKey]: [...(prev[activeScheduleKey] ?? []), ...copiedRecords],
+          }));
+
+          pushToast(`${copiedRecords.length} jadwal berhasil disalin ke bulan berikutnya.`, "success");
+          setSheetStatus((prev) => ({ ...prev, saving: false }));
+        } catch (error) {
+          console.error("Error copying schedule:", error);
+          pushToast("Gagal menyalin jadwal.", "error");
+          setSheetStatus((prev) => ({ ...prev, saving: false, error: "Gagal menyalin jadwal." }));
+        }
+      },
+      { title: "Salin Jadwal", confirmLabel: "Ya, Salin" }
+    );
   };
 
   const postToSheet = async (
@@ -4377,6 +4497,7 @@ export function App() {
                     setSelectedSuratTugasKode("");
                   }}
                   onSuratKodeChange={setSelectedSuratTugasKode}
+                  onCopyScheduleToNextMonth={handleCopyScheduleToNextMonth}
                 />
                 {(activeKey === "bulanIni" ||
                   activeKey === "jadwalTambahanPelayanan" ||
