@@ -258,6 +258,20 @@ body {
   border-left: 3px solid #cbd5e1;
 }
 
+/* Holiday (libur nasional) highlight for header and cells */
+.schedule-table th.holiday-col,
+.schedule-table td.holiday-col {
+  background-color: #fff1f2;
+  border-color: #fecaca !important;
+}
+.schedule-table thead th.holiday-col .schedule-header-weekday {
+  color: #b91c1c;
+  font-weight: 700;
+}
+.schedule-table thead th.holiday-col .schedule-header-date {
+  color: #991b1b;
+}
+
 .surat-day-separator td {
   border-top: 2px solid #6c757d !important;
 }

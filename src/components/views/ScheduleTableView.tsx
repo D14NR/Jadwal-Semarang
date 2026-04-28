@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatScheduleLabelWithDay, formatScheduleLabel } from "../../utils/schedule";
+import { isNationalHoliday } from "../../config/holidays";
 import { getTagStyle } from "../../utils/tagColor";
 import type { EditingSlot, RecordItem, ScheduleDayGroup, ScheduleGroup, ScheduleSlotDate } from "../../types/app";
 
@@ -65,7 +66,6 @@ export function ScheduleTableView({
       entryList.some((entry) => conflictEntryIds.has(entry.id))
     )
   );
-
   return (
     <>
       <div className="table-responsive border rounded mt-4 table-sticky-wrapper">
@@ -80,8 +80,9 @@ export function ScheduleTableView({
                   const slotDate = new Date(year, month - 1, day);
                   const weekday = slotDate.toLocaleDateString("id-ID", { weekday: "long" });
                   const dateLabel = formatScheduleLabel(slotDate);
+                  const holiday = isNationalHoliday(slot.date);
                   return (
-                    <th key={slot.date} className="text-center schedule-header-cell">
+                    <th key={slot.date} className={`${holiday ? "holiday-col" : ""} text-center schedule-header-cell`}>
                       <div className="schedule-header-weekday text-nowrap">{weekday}</div>
                       <div className="schedule-header-date text-nowrap">{dateLabel}</div>
                     </th>
@@ -97,10 +98,13 @@ export function ScheduleTableView({
                   const slotDate = new Date(year, month - 1, day);
                   const weekday = slotDate.toLocaleDateString("id-ID", { weekday: "long" });
                   const dateLabel = formatScheduleLabel(slotDate);
+                  const holiday = isNationalHoliday(slot.date);
                   return (
                     <th
                       key={slot.date}
-                      className={`${activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""} text-center schedule-header-cell`}
+                      className={`${activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""} text-center schedule-header-cell ${
+                        holiday ? "holiday-col" : ""
+                      }`}
                     >
                       <div className="schedule-header-weekday text-nowrap">{weekday}</div>
                       <div className="schedule-header-date text-nowrap">{dateLabel}</div>
@@ -287,20 +291,21 @@ export function ScheduleTableView({
                       editingSlot?.kelas === group.kelas &&
                       (editingSlot?.sekolah || "") === (group.sekolah || "") &&
                       editingSlot?.tanggal === slot.date;
+                    const holidayCell = isNationalHoliday(slot.date);
                     return (
-                      <td
-                        key={slot.date}
-                        onClick={() => {
-                          if (!readOnly) {
-                            onSelectSlot(group, slot);
-                          }
-                        }}
-                        className={`schedule-cell ${
-                          activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""
-                        } ${isEditingCell && !editingSlot?.entryId ? "is-editing" : ""} ${
-                          hasConflictInCell ? "schedule-cell-conflict" : ""
-                        }`}
-                      >
+                        <td
+                          key={slot.date}
+                          onClick={() => {
+                            if (!readOnly) {
+                              onSelectSlot(group, slot);
+                            }
+                          }}
+                          className={`schedule-cell ${
+                            activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""
+                          } ${isEditingCell && !editingSlot?.entryId ? "is-editing" : ""} ${
+                            hasConflictInCell ? "schedule-cell-conflict" : ""
+                          } ${holidayCell ? "holiday-col" : ""}`}
+                        >
                         {entries.length === 0 ? (
                           <span className="text-muted text-xxs">-</span>
                         ) : (

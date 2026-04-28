@@ -67,6 +67,13 @@ export const categories: CategoryConfig[] = [
     fields: [],
   },
   {
+    key: "liburNasional",
+    name: "Libur Nasional",
+    icon: "bi-flag",
+    description: "Kelola tanggal libur nasional",
+    fields: [],
+  },
+  {
     key: "mataPelajaran",
     name: "Mata Pelajaran",
     icon: "bi-journal-text",

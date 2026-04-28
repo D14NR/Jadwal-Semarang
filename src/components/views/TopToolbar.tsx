@@ -88,12 +88,7 @@ export function TopToolbar({
           </select>
         )}
 
-        {activeKey !== "suratTugasMengajar" &&
-          activeKey !== "printJadwal" &&
-          activeKey !== "dashboard" &&
-          activeKey !== "hapusJadwal" &&
-          activeKey !== "bulanIni" &&
-          activeKey !== "jadwalTambahanPelayanan" && (
+        {(activeKey === "mataPelajaran" || activeKey === "pengajar" || activeKey === "penempatanPengajar") && (
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
@@ -131,6 +126,11 @@ export function TopToolbar({
                 isClearable
                 isSearchable
                 isDisabled={!selectedSuratTugasMonthKey}
+                menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                menuPosition="absolute"
+                styles={{
+                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                }}
               />
             </div>
           </>

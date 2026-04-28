@@ -16,6 +16,7 @@ const bucketTableMap = {
   penempatan_pengajar: "penempatan_pengajar",
   izin_pengajar: "izin_pengajar",
   permintaan_pengajar: "permintaan_pengajar_antar_cabang",
+  libur_nasional: "libur_nasional",
 } as const;
 
 type BucketName = keyof typeof bucketTableMap;
@@ -170,6 +171,17 @@ const schemas: Record<BucketName, BucketSchema> = {
       sesi_8: asString(data["Sesi 8"]),
       sesi_9: asString(data["Sesi 9"]),
       sesi_10: asString(data["Sesi 10"]),
+    }),
+  },
+  libur_nasional: {
+    table: "libur_nasional",
+    fromDb: (row) => ({
+      Tanggal: asString(row.tanggal),
+      Label: asString(row.label),
+    }),
+    toDb: (data) => ({
+      tanggal: asString(data.Tanggal),
+      label: asString(data.Label),
     }),
   },
   penempatan_pengajar: {

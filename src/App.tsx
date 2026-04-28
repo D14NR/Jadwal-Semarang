@@ -31,6 +31,7 @@ import { PermintaanPengajarView } from "./components/views/PermintaanPengajarVie
 import { SuratTugasView } from "./components/views/SuratTugasView";
 import { PrintJadwalView } from "./components/views/PrintJadwalView";
 import { HapusJadwalView } from "./components/views/HapusJadwalView";
+import { HolidaysAdminView } from "./components/views/HolidaysAdminView";
 import { LoadingOverlay } from "./components/feedback/LoadingOverlay";
 import { ConfirmDialog } from "./components/feedback/ConfirmDialog";
 import { ToastStack } from "./components/feedback/ToastStack";
@@ -60,6 +61,7 @@ import {
   filterScheduleByMonth,
   getNextMonthKey,
 } from "./utils/copySchedule";
+import { setNationalHolidays as setLocalNationalHolidays } from "./config/holidays";
 import {
   deleteRowsByIds,
   insertRow,
@@ -108,6 +110,12 @@ export function App() {
     waktuSelesai: "",
   });
   const [copyTargetDates, setCopyTargetDates] = useState<string[]>([]);
+  useEffect(() => {
+    const allowedSearchKeys = new Set(["mataPelajaran", "pengajar", "penempatanPengajar"]);
+    if (!allowedSearchKeys.has(activeKey)) {
+      setQuery("");
+    }
+  }, [activeKey]);
   const [query, setQuery] = useState("");
   const [sheetStatus, setSheetStatus] = useState({
     loading: false,
@@ -257,6 +265,8 @@ export function App() {
   const [deleteScheduleType, setDeleteScheduleType] = useState<"bulanIni" | "jadwalTambahanPelayanan">(
     "bulanIni"
   );
+  // Minimum required gap (in minutes) between classes in different branches for the same teacher
+  const INTER_BRANCH_MIN_GAP_MINUTES = 30; // changed from 60 to 30 (can be adjusted to 45 if desired)
   const [deleteMonthKey, setDeleteMonthKey] = useState(() => getMonthKey(new Date()));
   const [isDeletingByMonth, setIsDeletingByMonth] = useState(false);
   const [scheduleCabangView, setScheduleCabangView] = useState<Record<ScheduleMenuKey, string>>({
@@ -268,6 +278,25 @@ export function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [toasts, setToasts] = useState<AppToast[]>([]);
+
+  // On app start, try to load holidays from DB and populate localStorage so UI syncs
+  useEffect(() => {
+    let mounted = true;
+    const loadHolidaysFromDb = async () => {
+      try {
+        const rows = await listRows("libur_nasional");
+        if (!mounted) return;
+        const items = rows.map((r) => ({ date: r.data.Tanggal || r.data.tanggal || "", label: r.data.Label || r.data.Label || "" }));
+        setLocalNationalHolidays(items.filter((it) => it.date));
+      } catch (_e) {
+        // ignore DB read errors; keep localStorage defaults
+      }
+    };
+    void loadHolidaysFromDb();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -960,7 +989,11 @@ export function App() {
   };
 
   const visibleCategories = useMemo(
-    () => categories.filter((category) => (category.key === "hapusJadwal" ? isAdmin : true)),
+    () =>
+      categories.filter((category) => {
+        if (category.key === "hapusJadwal" || category.key === "liburNasional") return isAdmin;
+        return true;
+      }),
     [isAdmin]
   );
 
@@ -4088,14 +4121,14 @@ export function App() {
           return;
         }
         if (entry.cabang !== cabang) {
-          const hasGap = startTime >= range.end + 60 || range.start >= endTime + 60;
+          const hasGap = startTime >= range.end + INTER_BRANCH_MIN_GAP_MINUTES || range.start >= endTime + INTER_BRANCH_MIN_GAP_MINUTES;
           if (!hasGap) {
             const tanggalLabel = getSlotLabelByDate(entry.tanggal ?? tanggal);
             const cabangLabel = entry.cabang || "Cabang tidak diketahui";
             const kelasLabel = entry.kelas || "Kelas tidak diketahui";
             const waktuLabel = entry.waktu || "jam tidak diketahui";
             setConflictError(
-              `Pengajar sudah mengajar di ${cabangLabel} (${kelasLabel}) pada ${tanggalLabel} pukul ${waktuLabel}. Antar cabang wajib jeda minimal 1 jam.`
+              `Pengajar sudah mengajar di ${cabangLabel} (${kelasLabel}) pada ${tanggalLabel} pukul ${waktuLabel}. Antar cabang wajib jeda minimal ${INTER_BRANCH_MIN_GAP_MINUTES} menit.`
             );
             return;
           }
@@ -4171,7 +4204,7 @@ export function App() {
               break;
             }
             if (entry.cabang !== cabang) {
-              const hasGap = startTime >= range.end + 60 || range.start >= endTime + 60;
+              const hasGap = startTime >= range.end + INTER_BRANCH_MIN_GAP_MINUTES || range.start >= endTime + INTER_BRANCH_MIN_GAP_MINUTES;
               if (!hasGap) {
                 conflictFound = true;
                 break;
@@ -4626,6 +4659,12 @@ export function App() {
                     onEdit={handleOpenPenempatanModal}
                     onDelete={handleDeletePenempatanPengajar}
                   />
+                  ) : activeKey === "liburNasional" ? (
+                    isAdmin ? (
+                      <HolidaysAdminView />
+                    ) : (
+                      <div className="alert alert-warning">Anda tidak memiliki izin untuk mengakses halaman ini.</div>
+                    )
                 ) : activeKey === "izinPengajar" ? (
                   <IzinPengajarView
                     loading={izinStatus.loading}
