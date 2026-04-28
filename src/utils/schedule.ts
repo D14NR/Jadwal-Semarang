@@ -52,7 +52,7 @@ export const formatScheduleLabel = (date: Date) =>
 
 export const formatScheduleLabelWithDay = (date: Date) => {
   const weekday = date.toLocaleDateString("id-ID", { weekday: "long" });
-  return `${weekday},${formatScheduleLabel(date)}`;
+  return `${weekday}, ${formatScheduleLabel(date)}`;
 };
 
 export const parseFlexibleDate = (value: string) => {

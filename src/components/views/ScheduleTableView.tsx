@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatScheduleLabelWithDay } from "../../utils/schedule";
+import { formatScheduleLabelWithDay, formatScheduleLabel } from "../../utils/schedule";
 import { getTagStyle } from "../../utils/tagColor";
 import type { EditingSlot, RecordItem, ScheduleDayGroup, ScheduleGroup, ScheduleSlotDate } from "../../types/app";
 
@@ -75,35 +75,39 @@ export function ScheduleTableView({
               <tr>
                 <th className="text-center col-aksi sticky-col-aksi">Aksi</th>
                 <th className="text-center col-kelas sticky-col-kelas">Kelas</th>
-                {activeScheduleDates.map((slot) => {
+                {activeScheduleDates.map((slot, index) => {
                   const [year, month, day] = slot.date.split("-").map(Number);
                   const slotDate = new Date(year, month - 1, day);
-                  return <th key={slot.date}>{formatScheduleLabelWithDay(slotDate)}</th>;
+                  const weekday = slotDate.toLocaleDateString("id-ID", { weekday: "long" });
+                  const dateLabel = formatScheduleLabel(slotDate);
+                  return (
+                    <th key={slot.date} className="text-center schedule-header-cell">
+                      <div className="schedule-header-weekday text-nowrap">{weekday}</div>
+                      <div className="schedule-header-date text-nowrap">{dateLabel}</div>
+                    </th>
+                  );
                 })}
               </tr>
             ) : (
-              <>
-                <tr>
-                  <th rowSpan={2} className="text-center col-aksi sticky-col-aksi">
-                    Aksi
-                  </th>
-                  <th rowSpan={2} className="text-center col-kelas sticky-col-kelas">
-                    Kelas
-                  </th>
-                  {activeDayGroups.map((group, groupIndex) => (
-                    <th key={group.label} colSpan={group.count} className={`text-center ${groupIndex > 0 ? "day-divider" : ""}`}>
-                      {group.label}
+              <tr>
+                <th className="text-center col-aksi sticky-col-aksi">Aksi</th>
+                <th className="text-center col-kelas sticky-col-kelas">Kelas</th>
+                {activeScheduleDates.map((slot, index) => {
+                  const [year, month, day] = slot.date.split("-").map(Number);
+                  const slotDate = new Date(year, month - 1, day);
+                  const weekday = slotDate.toLocaleDateString("id-ID", { weekday: "long" });
+                  const dateLabel = formatScheduleLabel(slotDate);
+                  return (
+                    <th
+                      key={slot.date}
+                      className={`${activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""} text-center schedule-header-cell`}
+                    >
+                      <div className="schedule-header-weekday text-nowrap">{weekday}</div>
+                      <div className="schedule-header-date text-nowrap">{dateLabel}</div>
                     </th>
-                  ))}
-                </tr>
-                <tr>
-                  {activeScheduleDates.map((slot, index) => (
-                    <th key={slot.date} className={activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""}>
-                      {slot.label}
-                    </th>
-                  ))}
-                </tr>
-              </>
+                  );
+                })}
+              </tr>
             )}
           </thead>
           <tbody>

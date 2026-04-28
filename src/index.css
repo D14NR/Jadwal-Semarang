@@ -221,7 +221,41 @@ body {
   top: 0;
   z-index: 3;
   background-color: #f5f7fa;
-  border-bottom: 2px solid #e8ecf1;
+  border-bottom: 3px solid #94a3b8;
+}
+
+/* Make schedule header weekday above date and emphasize borders */
+.schedule-table thead th.schedule-header-cell {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+.schedule-table thead th.schedule-header-cell .schedule-header-weekday {
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #334155;
+}
+.schedule-table thead th.schedule-header-cell .schedule-header-date {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+.schedule-table thead th {
+  border-bottom: 3px solid #94a3b8;
+}
+.schedule-table th,
+.schedule-table td {
+  border-color: #e6eef5;
+}
+
+/* Emphasize the vertical separator for the class column */
+.schedule-table .col-kelas,
+.schedule-table thead .sticky-col-kelas {
+  border-right: 3px solid #94a3b8;
+}
+
+/* Slightly stronger day-divider line */
+.schedule-table th.day-divider,
+.schedule-table td.day-divider {
+  border-left: 3px solid #cbd5e1;
 }
 
 .surat-day-separator td {
