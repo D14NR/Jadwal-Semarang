@@ -69,6 +69,7 @@ export type MonitoringRow = {
   mapelList: string[];
   jumlahMapel: number;
   totalSesi: number;
+  mapelCountByKode: Record<string, number>;
 };
 
 export type ToastType = "success" | "error" | "info";

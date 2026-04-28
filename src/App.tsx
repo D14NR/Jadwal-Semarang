@@ -1378,6 +1378,7 @@ export function App() {
     const allowedDates = new Set(monthScheduleDates.map((slot) => slot.date));
     return monthScheduleGroups.map((group) => {
       const mapelCounter = new Map<string, number>();
+      const mapelCountByKode = new Map<string, number>();
       let totalSesi = 0;
 
       Object.entries(group.entriesByDate).forEach(([dateKey, entries]) => {
@@ -1391,6 +1392,7 @@ export function App() {
           }
           totalSesi += 1;
           mapelCounter.set(mapel, (mapelCounter.get(mapel) || 0) + 1);
+          mapelCountByKode.set(mapel, (mapelCountByKode.get(mapel) || 0) + 1);
         });
       });
 
@@ -1404,6 +1406,7 @@ export function App() {
         mapelList,
         jumlahMapel: mapelCounter.size,
         totalSesi,
+        mapelCountByKode: Object.fromEntries(mapelCountByKode),
       };
     });
   }, [monthScheduleDates, monthScheduleGroups]);

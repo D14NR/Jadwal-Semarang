@@ -91,7 +91,9 @@ export function TopToolbar({
         {activeKey !== "suratTugasMengajar" &&
           activeKey !== "printJadwal" &&
           activeKey !== "dashboard" &&
-          activeKey !== "hapusJadwal" && (
+          activeKey !== "hapusJadwal" &&
+          activeKey !== "bulanIni" &&
+          activeKey !== "jadwalTambahanPelayanan" && (
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}

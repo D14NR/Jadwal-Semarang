@@ -122,18 +122,27 @@ export function ScheduleTableView({
                     {readOnly ? (
                       <span className="text-muted">-</span>
                     ) : (
-                      <div className="d-flex flex-column align-items-center justify-content-center gap-1">
+                      <div className="d-flex flex-column align-items-center justify-content-center" style={{ gap: "0.25rem" }}>
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
                             onMoveClass(group, -1);
                           }}
-                          className="btn btn-outline-secondary btn-sm btn-icon"
+                          className="btn btn-sm btn-icon"
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            padding: "0",
+                            border: "1px solid #cbd5e1",
+                            backgroundColor: "#fff",
+                            color: "#64748b",
+                            borderRadius: "5px"
+                          }}
                           aria-label="Geser kelas ke atas"
                           disabled={saving || groupIndex === 0}
                         >
-                          <i className="bi bi-chevron-up" />
+                          <i className="bi bi-chevron-up" style={{ fontSize: "14px" }} />
                         </button>
                         <button
                           type="button"
@@ -141,13 +150,22 @@ export function ScheduleTableView({
                             event.stopPropagation();
                             onMoveClass(group, 1);
                           }}
-                          className="btn btn-outline-secondary btn-sm btn-icon"
+                          className="btn btn-sm btn-icon"
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            padding: "0",
+                            border: "1px solid #cbd5e1",
+                            backgroundColor: "#fff",
+                            color: "#64748b",
+                            borderRadius: "5px"
+                          }}
                           aria-label="Geser kelas ke bawah"
                           disabled={
                             saving || groupIndex === monthScheduleGroups.length - 1
                           }
                         >
-                          <i className="bi bi-chevron-down" />
+                          <i className="bi bi-chevron-down" style={{ fontSize: "14px" }} />
                         </button>
                         <button
                           type="button"
@@ -155,10 +173,19 @@ export function ScheduleTableView({
                             event.stopPropagation();
                             onDeleteClass(group);
                           }}
-                          className="btn btn-outline-danger btn-sm btn-icon"
+                          className="btn btn-sm btn-icon"
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            padding: "0",
+                            border: "1px solid #fca5a5",
+                            backgroundColor: "#fee2e2",
+                            color: "#dc2626",
+                            borderRadius: "5px"
+                          }}
                           aria-label="Hapus kelas"
                         >
-                          <i className="bi bi-trash" />
+                          <i className="bi bi-trash" style={{ fontSize: "14px" }} />
                         </button>
                       </div>
                     )}
