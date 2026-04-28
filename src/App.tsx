@@ -241,9 +241,15 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
   const [monthAnchor, setMonthAnchor] = useState(() => new Date());
-  const [selectedMonthKey, setSelectedMonthKey] = useState(() =>
-    getMonthKey(new Date())
-  );
+  const [selectedMonthKey, setSelectedMonthKey] = useState(() => {
+    try {
+      const saved = localStorage.getItem("selectedMonthKey");
+      if (saved) return saved;
+    } catch (_e) {
+      // ignore
+    }
+    return getMonthKey(new Date());
+  });
   const [printScheduleType, setPrintScheduleType] = useState<"reguler" | "tambahan">("reguler");
   const [printSelectedClassKey, setPrintSelectedClassKey] = useState("");
   const [printCopies, setPrintCopies] = useState(5);
@@ -684,6 +690,14 @@ export function App() {
   const selectedMonth = useMemo(() => {
     const [year, month] = selectedMonthKey.split("-").map(Number);
     return new Date(year, Math.max(0, (month || 1) - 1), 1);
+  }, [selectedMonthKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("selectedMonthKey", selectedMonthKey);
+    } catch (_e) {
+      // ignore
+    }
   }, [selectedMonthKey]);
 
   const selectedSuratTugasMonthDate = useMemo(() => {
