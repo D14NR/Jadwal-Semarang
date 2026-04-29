@@ -1,5 +1,4 @@
-import { sesiHeaders } from "../../utils/schedule";
-import { formatSessionParts } from "../../utils/schedule";
+import { sesiHeaders, formatSessionParts, parseRangeFromString } from "../../utils/schedule";
 
 type SuratDayRow = {
   dayLabel: string;
@@ -67,14 +66,34 @@ export function SuratTugasView({
                 dayRows.flatMap((row) =>
                   row.dates.map((slot, slotIndex) => {
                     const dateRecords = shouldShowSessions ? recordsByDate.get(slot.date) ?? [] : [];
+                    // Collect all sesi values across all Sesi columns for this date,
+                    // parse their start time, sort by start, then assign into columns
+                    // so earliest-start becomes Sesi 1, next becomes Sesi 2, etc.
+                    const allValues = dateRecords.flatMap((record) =>
+                      sesiHeaders.map((h) => (record[h] || "").trim()).filter(Boolean)
+                    );
+                    const ordered = allValues
+                      .map((v, i) => {
+                        const timeMatch = (v || "").match(/\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2}/);
+                        const range = parseRangeFromString(timeMatch ? timeMatch[0] : "");
+                        return { v, start: range?.start ?? Infinity, idx: i };
+                      })
+                      .sort((a, b) => (a.start - b.start) || (a.idx - b.idx))
+                      .map((x) => x.v);
+                    const dateColumns: string[][] = Array.from({ length: sesiHeaders.length }, () => []);
+                    ordered.forEach((v, i) => {
+                      if (i < dateColumns.length) {
+                        dateColumns[i].push(v);
+                      } else {
+                        dateColumns[dateColumns.length - 1].push(v);
+                      }
+                    });
                     return (
                       <tr key={`${row.dayLabel}-${slot.date}`} className={slotIndex === 0 ? "surat-day-separator" : ""}>
                         <td className="fw-semibold">{slotIndex === 0 ? row.dayLabel : ""}</td>
                         <td>{slot.label}</td>
-                        {sesiHeaders.map((sessionHeader) => {
-                          const sessionValues = dateRecords
-                            .map((record) => (record[sessionHeader] || "").trim())
-                            .filter(Boolean);
+                        {sesiHeaders.map((sessionHeader, sessionIndex) => {
+                          const sessionValues = dateColumns[sessionIndex] ?? [];
                           return (
                             <td key={`${slot.date}-${sessionHeader}`}>
                               {!shouldShowSessions ? null : sessionValues.length === 0 ? (

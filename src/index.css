@@ -15,9 +15,10 @@ body {
 }
 
 .surface-panel {
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 16px;
-  backdrop-filter: blur(6px);
+  background-color: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
 .app-header-card {
