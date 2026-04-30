@@ -1649,13 +1649,19 @@ export function App() {
       const khususItems = records.jadwalTambahanPelayanan ?? [];
       const allItems = [...regulerItems, ...khususItems];
 
-      const formatUpdatedLabel = () => {
+      const formatUpdatedLabel = (timestamp?: string) => {
         // Format: "Update-27 Apr 2026 14:19"
-        const now = new Date();
-        const day = now.getDate();
-        const month = now.toLocaleDateString("id-ID", { month: "short" });
-        const year = now.getFullYear();
-        const time = now.toLocaleTimeString("en-GB", {
+        if (!timestamp) {
+          return "";
+        }
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) {
+          return "";
+        }
+        const day = date.getDate();
+        const month = date.toLocaleDateString("id-ID", { month: "short" });
+        const year = date.getFullYear();
+        const time = date.toLocaleTimeString("en-GB", {
           hour12: false,
           hour: "2-digit",
           minute: "2-digit",
@@ -1663,10 +1669,8 @@ export function App() {
         return `Update-${day} ${month} ${year} ${time}`;
       };
 
-      const updateLabel = formatUpdatedLabel();
-
-      const grouped = new Map<string, string[]>();
-      allItems.forEach((item) => {
+      const grouped = new Map<string, Array<{ text: string; timestamp?: string }>>();
+      allItems.forEach((item: any) => {
         const kodePengajar = (item.pengajar || "").trim();
         const mapel = (item.mapel || "").trim();
         const waktu = (item.waktu || "").trim();
@@ -1678,17 +1682,20 @@ export function App() {
           return;
         }
         const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
-        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang} ${updateLabel}`;
+        const updateLabel = formatUpdatedLabel(item.updatedAt || item.createdAt);
+        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}${
+          updateLabel ? ` ${updateLabel}` : ""
+        }`;
         const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
         const list = grouped.get(key) ?? [];
-        list.push(sesiText);
+        list.push({ text: sesiText, timestamp: item.updatedAt || item.createdAt });
         grouped.set(key, list);
       });
 
       const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
         const [kodeKey, tanggalKey] = key.split("||");
         const template = allItems.find(
-          (item) =>
+          (item: any) =>
             normalizeValueKey(item.pengajar || "") === kodeKey &&
             normalizeValueKey(formatSheetTanggal(item.tanggal || "")) === tanggalKey
         );
@@ -1698,7 +1705,7 @@ export function App() {
           Tanggal: tanggalLabel,
         };
         for (let index = 0; index < 10; index += 1) {
-          row[`Sesi ${index + 1}`] = sesiList[index] || "";
+          row[`Sesi ${index + 1}`] = sesiList[index]?.text || "";
         }
         return row;
       });
@@ -1850,7 +1857,9 @@ export function App() {
             catatan: "",
           }),
           id: row.id,
-        } as RecordItem;
+          updatedAt: row.updatedAt || row.createdAt,
+          createdAt: row.createdAt,
+        } as RecordItem & { updatedAt?: string; createdAt?: string };
       });
       setRecords((prev) => ({
         ...prev,
