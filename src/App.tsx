@@ -142,7 +142,6 @@ export function App() {
     error: "",
     lastSync: "",
   });
-  const [suratTugasRecords, setSuratTugasRecords] = useState<Record<string, string>[]>([]);
   const [penempatanStatus, setPenempatanStatus] = useState({
     loading: false,
     error: "",
@@ -1643,6 +1642,58 @@ export function App() {
     }
   };
 
+  const suratTugasRecords = useMemo(() => {
+    // Compute surat tugas records from jadwal reguler and jadwal khusus
+    try {
+      const regulerItems = records.bulanIni ?? [];
+      const khususItems = records.jadwalTambahanPelayanan ?? [];
+      const allItems = [...regulerItems, ...khususItems];
+
+      const grouped = new Map<string, string[]>();
+      allItems.forEach((item) => {
+        const kodePengajar = (item.pengajar || "").trim();
+        const mapel = (item.mapel || "").trim();
+        const waktu = (item.waktu || "").trim();
+        const cabang = (item.cabang || "").trim();
+        const kelas = (item.kelas || "").trim();
+        const sekolah = (item.sekolah || "").trim();
+        const tanggalLabel = formatSheetTanggal(item.tanggal || "");
+        if (!kodePengajar || !tanggalLabel || !mapel || !waktu) {
+          return;
+        }
+        const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
+        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}`;
+        const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
+        const list = grouped.get(key) ?? [];
+        list.push(sesiText);
+        grouped.set(key, list);
+      });
+
+      const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
+        const [kodeKey, tanggalKey] = key.split("||");
+        const template = allItems.find(
+          (item) =>
+            normalizeValueKey(item.pengajar || "") === kodeKey &&
+            normalizeValueKey(formatSheetTanggal(item.tanggal || "")) === tanggalKey
+        );
+        const tanggalLabel = template ? formatSheetTanggal(template.tanggal || "") : "";
+        const row: Record<string, string> = {
+          "Kode Pengajar": template?.pengajar || "",
+          Tanggal: tanggalLabel,
+        };
+        for (let index = 0; index < 10; index += 1) {
+          row[`Sesi ${index + 1}`] = sesiList[index] || "";
+        }
+        return row;
+      });
+
+      return suratRows;
+    } catch (error) {
+      console.error("Error computing surat tugas records:", error);
+      return [];
+    }
+  }, [records.bulanIni, records.jadwalTambahanPelayanan]);
+
   const suratTugasRecordsByMonth = useMemo(() => {
     if (!selectedSuratTugasMonthKey) {
       return [];
@@ -2030,21 +2081,9 @@ export function App() {
   const handleLoadSuratTugas = async () => {
     setSuratTugasStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const rows = await listRows(dataBucket["Surat Tugas Pengajar"]);
-      const parsed = { records: rows.map((row) => toRecord(row)) };
-      
-      const expectedHeaders = ["Kode Pengajar", "Tanggal", "Sesi 1", "Sesi 2", "Sesi 3", "Sesi 4", "Sesi 5", "Sesi 6", "Sesi 7", "Sesi 8", "Sesi 9", "Sesi 10"];
-
-      const records = parsed.records.filter((rec) => rec["Kode Pengajar"] || rec["Tanggal"]).map((record) => {
-        const normalized: Record<string, string> = {};
-        expectedHeaders.forEach((h) => {
-          const matchedKey = Object.keys(record).find(k => normalizeHeader(k) === normalizeHeader(h));
-          normalized[h] = matchedKey ? record[matchedKey] : "";
-        });
-        return normalized;
-      });
-
-      setSuratTugasRecords(records);
+      // Data is now computed automatically from jadwal_reguler and jadwal_khusus
+      // No need to load from database, just update the sync status
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Simulate async
       setSuratTugasStatus({
         loading: false,
         error: "",
@@ -3681,75 +3720,10 @@ export function App() {
   });
 
   const rebuildSuratTugasBucket = async () => {
-    const regulerRows = await listRows(dataBucket["Jadwal Bulan ini"]);
-    const khususRows = await listRows(dataBucket["Jadwal Khusus"]);
-    const allRows = [...regulerRows, ...khususRows];
-
-    const formatUpdatedLabel = (value?: string) => {
-      if (!value) {
-        return "";
-      }
-      const parsed = new Date(value);
-      if (Number.isNaN(parsed.getTime())) {
-        return "";
-      }
-      const day = parsed.getDate();
-      const month = parsed
-        .toLocaleDateString("id-ID", { month: "long" })
-        .toLowerCase();
-      const year = parsed.getFullYear();
-      const time = parsed.toLocaleTimeString("en-GB", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-      return `${day} ${month} ${year} ${time}`;
-    };
-
-    const grouped = new Map<string, string[]>();
-    allRows.forEach((rowItem) => {
-      const row = rowItem.data;
-      const kodePengajar = (row.Pengajar || "").trim();
-      const mapel = (row.Mapel || "").trim();
-      const waktu = (row.Waktu || "").trim();
-      const cabang = (row.Cabang || "").trim();
-      const kelas = (row.Kelas || "").trim();
-      const sekolah = (row.Sekolah || "").trim();
-      const tanggalLabel = formatSheetTanggal(row.Tanggal || "");
-      if (!kodePengajar || !tanggalLabel || !mapel || !waktu) {
-        return;
-      }
-      const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
-      const updatedLabel = formatUpdatedLabel(rowItem.updatedAt || rowItem.createdAt);
-      const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}${
-        updatedLabel ? ` update ${updatedLabel}` : ""
-      }`;
-      const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
-      const list = grouped.get(key) ?? [];
-      list.push(sesiText);
-      grouped.set(key, list);
-    });
-
-    const suratRows = Array.from(grouped.entries()).map(([key, sesiList]) => {
-      const [kodeKey, tanggalKey] = key.split("||");
-      const template = allRows.find(
-        (rowItem) =>
-          normalizeValueKey(rowItem.data.Pengajar) === kodeKey &&
-          normalizeValueKey(formatSheetTanggal(rowItem.data.Tanggal || "")) === tanggalKey
-      );
-      const tanggalLabel = template ? formatSheetTanggal(template.data.Tanggal || "") : "";
-      const row: Record<string, string> = {
-        "Kode Pengajar": template?.data.Pengajar || "",
-        Tanggal: tanggalLabel,
-      };
-      for (let index = 0; index < 10; index += 1) {
-        row[`Sesi ${index + 1}`] = sesiList[index] || "";
-      }
-      return row;
-    });
-
-    await replaceBucketRows(dataBucket["Surat Tugas Pengajar"], suratRows);
+    // No need to save to database anymore - surat tugas is computed automatically
+    // from jadwal_reguler and jadwal_khusus. This function is kept for compatibility
+    // and to trigger UI refresh if needed.
+    return Promise.resolve();
   };
 
   const handleCopyScheduleToNextMonth = () => {
