@@ -1649,6 +1649,22 @@ export function App() {
       const khususItems = records.jadwalTambahanPelayanan ?? [];
       const allItems = [...regulerItems, ...khususItems];
 
+      const formatUpdatedLabel = () => {
+        // Format: "Update-27 Apr 2026 14:19"
+        const now = new Date();
+        const day = now.getDate();
+        const month = now.toLocaleDateString("id-ID", { month: "short" });
+        const year = now.getFullYear();
+        const time = now.toLocaleTimeString("en-GB", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return `Update-${day} ${month} ${year} ${time}`;
+      };
+
+      const updateLabel = formatUpdatedLabel();
+
       const grouped = new Map<string, string[]>();
       allItems.forEach((item) => {
         const kodePengajar = (item.pengajar || "").trim();
@@ -1662,7 +1678,7 @@ export function App() {
           return;
         }
         const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
-        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}`;
+        const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang} ${updateLabel}`;
         const key = `${normalizeValueKey(kodePengajar)}||${normalizeValueKey(tanggalLabel)}`;
         const list = grouped.get(key) ?? [];
         list.push(sesiText);
