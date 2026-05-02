@@ -377,11 +377,6 @@ export function ScheduleTableView({
         </table>
       </div>
 
-      <div className="alert alert-info mt-3 text-xs mb-0">
-        {readOnly
-          ? "Mode lihat cabang lain aktif. Anda hanya dapat melihat jadwal tanpa mengubah data."
-          : "Klik sel untuk edit jadwal. Gunakan ikon panah di kolom aksi untuk menggeser urutan kelas."}
-      </div>
       {hasVisibleConflict ? (
         <div className="alert alert-danger mt-2 text-xs mb-0">
           Ada jadwal bentrok antar cabang. Sel berwarna merah menandakan pengajar di tanggal dan jam yang sama sudah terpakai di cabang lain.

@@ -375,6 +375,15 @@ export function App() {
       normalizeText(selectedScheduleCabang) !== normalizeText(restrictedCabang)
   );
 
+  const scheduleTopToolbarMessage = useMemo(() => {
+    if (!isScheduleMenuKey(activeKey)) {
+      return "";
+    }
+    return isScheduleReadOnly
+      ? "Mode lihat cabang lain aktif. Anda hanya dapat melihat jadwal tanpa mengubah data."
+      : "Klik sel untuk edit jadwal. Gunakan ikon panah di kolom aksi untuk menggeser urutan kelas.";
+  }, [activeKey, isScheduleReadOnly]);
+
   const pushToast = (message: string, type: ToastType = "info") => {
     const id = `${Date.now()}-${Math.round(Math.random() * 10000)}`;
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -4536,6 +4545,7 @@ export function App() {
                   penempatanStatus={penempatanStatus}
                   izinStatus={izinStatus}
                   permintaanStatus={permintaanStatus}
+                  topToolbarMessage={scheduleTopToolbarMessage}
                   onQueryChange={setQuery}
                   onScheduleCabangChange={(nextCabang) => {
                     if (!isScheduleMenuKey(activeKey)) {
