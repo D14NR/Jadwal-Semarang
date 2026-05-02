@@ -72,7 +72,7 @@ import {
 } from "./lib/database";
 
 export function App() {
-  const MONTH_WINDOW = 2;
+  const MONTH_WINDOW = 1;
   const getMonthKey = (date: Date) =>
     formatLocalDate(new Date(date.getFullYear(), date.getMonth(), 1)).slice(0, 7);
 
