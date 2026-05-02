@@ -8,7 +8,7 @@ export type LoginAccount = {
 };
 
 export const loginAccounts: LoginAccount[] = [
-  { username: "admin", password: "290192", role: "admin", cabang: "" },
+  { username: "Admin", password: "dian290192", role: "admin", cabang: "" },
   { username: "semarang1", password: "443", role: "Semarang 1", cabang: "Semarang 1" },
   { username: "semarang2", password: "444", role: "Semarang 2", cabang: "Semarang 2" },
   { username: "semarang3", password: "", role: "Semarang 3", cabang: "Semarang 3" },

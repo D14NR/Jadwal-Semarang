@@ -2524,7 +2524,7 @@ export function App() {
       _id: record._id || record.ID || record.Id || record.id || "",
       "Kode Pengajar": (record["Kode Pengajar"] || "").trim().toLowerCase(),
       "Nama Pengajar": record["Nama Pengajar"] || record.Nama || "",
-      Domisili: restrictedCabang || record.Domisili || "",
+      Domisili: record.Domisili || "",
       "Tanggal Mulai": startDate ? formatScheduleLabel(startDate) : "",
       "Tanggal Selesai": endDate ? formatScheduleLabel(endDate) : "",
       Keterangan: record.Keterangan || "",
@@ -3291,8 +3291,17 @@ export function App() {
     pushToast(`Selamat datang, ${nextSession.username}.`, "success");
   };
 
+  const clearAppCache = () => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (_error) {
+      // ignore storage clear failures
+    }
+  };
+
   const handleLogout = () => {
-    localStorage.removeItem(authStorageKey);
+    clearAppCache();
     setAuthSession(null);
     setSidebarMobileOpen(false);
     setLoginUsername("");
@@ -4607,8 +4616,11 @@ export function App() {
                     todaySchedules={dashboardTodaySchedules}
                     izinRequests={dashboardIzinRequests}
                     canManageIzin={Boolean(authSession)}
+                    canManagePermintaan={Boolean(authSession)}
                     onApproveIzin={(item) => handleUpdateIzinStatus(item, "Disetujui")}
                     onRejectIzin={(item) => handleUpdateIzinStatus(item, "Ditolak")}
+                    onApprovePermintaan={(item) => handleUpdatePermintaanStatus(item, "Disetujui")}
+                    onRejectPermintaan={(item) => handleUpdatePermintaanStatus(item, "Ditolak")}
                   />
                 ) : activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan" ? (
                   <ScheduleTableView

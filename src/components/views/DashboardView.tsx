@@ -35,8 +35,11 @@ type DashboardViewProps = {
   todaySchedules: DashboardScheduleItem[];
   izinRequests: DashboardIzinItem[];
   canManageIzin: boolean;
+  canManagePermintaan: boolean;
   onApproveIzin: (item: DashboardIzinItem) => void;
   onRejectIzin: (item: DashboardIzinItem) => void;
+  onApprovePermintaan: (item: DashboardRequestItem) => void;
+  onRejectPermintaan: (item: DashboardRequestItem) => void;
 };
 
 export function DashboardView({
@@ -159,6 +162,9 @@ export function DashboardView({
               <th>Cabang Peminta</th>
               <th>Cabang Domisili</th>
               <th>Status</th>
+              <th className="text-center" style={{ width: 130 }}>
+                Aksi
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -170,22 +176,48 @@ export function DashboardView({
               </tr>
             ) : pendingRequests.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center text-muted py-3">
+                <td colSpan={6} className="text-center text-muted py-3">
                   Tidak ada permintaan pengajar menunggu.
                 </td>
               </tr>
             ) : (
-              pendingRequests.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.kodePengajar || "-"}</td>
-                  <td>{item.namaPengajar || "-"}</td>
-                  <td>{item.cabangPeminta || "-"}</td>
-                  <td>{item.cabangDomisili || "-"}</td>
-                  <td>
-                    <span className="badge text-bg-warning">{item.status || "Menunggu"}</span>
-                  </td>
-                </tr>
-              ))
+              pendingRequests.map((item) => {
+                const statusKey = (item.status || "Menunggu").trim().toLowerCase();
+                const canShowAction = canManagePermintaan && statusKey === "menunggu";
+                return (
+                  <tr key={item.id}>
+                    <td>{item.kodePengajar || "-"}</td>
+                    <td>{item.namaPengajar || "-"}</td>
+                    <td>{item.cabangPeminta || "-"}</td>
+                    <td>{item.cabangDomisili || "-"}</td>
+                    <td>
+                      <span className="badge text-bg-warning">{item.status || "Menunggu"}</span>
+                    </td>
+                    <td>
+                      {canShowAction ? (
+                        <div className="d-flex justify-content-center gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-outline-success btn-sm"
+                            onClick={() => onApprovePermintaan(item)}
+                          >
+                            Setujui
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => onRejectPermintaan(item)}
+                          >
+                            Tolak
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
