@@ -168,6 +168,9 @@ export function PengajarModal({
                   const nextValues = (selected || []).map((item) => item.value);
                   onBidangStudiChange(nextValues);
                 }}
+                menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                menuPosition="absolute"
+                styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
               />
             </div>
             <div className="col-12 col-md-6">
