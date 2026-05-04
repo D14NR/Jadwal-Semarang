@@ -76,7 +76,7 @@ export function TopToolbar({
 
             <select
               className="form-select form-select-sm"
-              style={{ maxWidth: 220 }}
+              style={{ minWidth: 220, maxWidth: 280 }}
               value={selectedScheduleCabang}
               onChange={(event) => onScheduleCabangChange(event.target.value)}
             >
