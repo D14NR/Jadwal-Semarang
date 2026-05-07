@@ -29,6 +29,8 @@ type DashboardIzinItem = {
   diputuskanPada: string;
 };
 
+import { parseFlexibleDate } from "../../utils/schedule";
+
 type DashboardViewProps = {
   loading: boolean;
   pendingRequests: DashboardRequestItem[];
@@ -51,6 +53,18 @@ export function DashboardView({
   onApproveIzin,
   onRejectIzin,
 }: DashboardViewProps) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const visibleIzinRequests = (izinRequests || []).filter((item) => {
+    const endRaw = item.tanggalSelesai || item.tanggalMulai || "";
+    const parsed = parseFlexibleDate(String(endRaw || ""));
+    if (!parsed) return true; // keep when unsure
+    // include if end of day is >= today
+    parsed.setHours(23, 59, 59, 999);
+    return parsed >= todayStart;
+  });
+
   return (
     <div className="mt-3">
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -61,12 +75,12 @@ export function DashboardView({
           Jadwal Hari Ini: {todaySchedules.length}
         </span>
         <span className="badge text-bg-danger-subtle border border-danger-subtle text-danger-emphasis px-3 py-2">
-          Izin Pengajar: {izinRequests.length}
+          Izin Pengajar: {visibleIzinRequests.length}
         </span>
       </div>
 
       <h6 className="fw-semibold mb-2">Permintaan Izin Pengajar</h6>
-      <div className="table-responsive border rounded table-sticky-wrapper mb-4">
+      <div className="table-responsive border rounded table-sticky-wrapper mb-4 dashboard-table-wrapper">
         <table className="table table-sm table-bordered align-middle mb-0 table-sticky">
           <thead className="table-light">
             <tr>
@@ -90,14 +104,14 @@ export function DashboardView({
                   Memuat data dashboard...
                 </td>
               </tr>
-            ) : izinRequests.length === 0 ? (
+            ) : visibleIzinRequests.length === 0 ? (
               <tr>
                 <td colSpan={9} className="text-center text-muted py-3">
                   Tidak ada permintaan izin pengajar.
                 </td>
               </tr>
             ) : (
-              izinRequests.map((item) => {
+              visibleIzinRequests.map((item) => {
                 const normalizedStatus = (item.status || "Menunggu").trim().toLowerCase();
                 const canShowAction = canManageIzin && normalizedStatus === "menunggu";
                 return (
@@ -153,7 +167,7 @@ export function DashboardView({
       </div>
 
       <h6 className="fw-semibold mb-2">Permintaan Pengajar Antar Cabang (Menunggu)</h6>
-      <div className="table-responsive border rounded table-sticky-wrapper mb-4">
+      <div className="table-responsive border rounded table-sticky-wrapper mb-4 dashboard-table-wrapper">
         <table className="table table-sm table-bordered align-middle mb-0 table-sticky">
           <thead className="table-light">
             <tr>
@@ -224,7 +238,7 @@ export function DashboardView({
       </div>
 
       <h6 className="fw-semibold mb-2">Jadwal Hari Ini</h6>
-      <div className="table-responsive border rounded table-sticky-wrapper">
+      <div className="table-responsive border rounded table-sticky-wrapper dashboard-table-wrapper">
         <table className="table table-sm table-bordered align-middle mb-0 table-sticky">
           <thead className="table-light">
             <tr>

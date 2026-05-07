@@ -268,11 +268,19 @@ body {
 .table-sticky-wrapper {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: none;
+  /* constrain height so internal tables can scroll vertically */
+  max-height: calc(100vh - 210px);
   overflow: auto;
   border: 1px solid #e2e8f0 !important;
   border-radius: 10px !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Dashboard has several stacked tables; limit each so they don't expand and get clipped */
+.dashboard-table-wrapper {
+  flex: none !important;
+  max-height: 320px;
+  overflow: auto;
 }
 
 .table-sticky thead th {
