@@ -168,6 +168,9 @@ export function App() {
   const [conflictError, setConflictError] = useState("");
   const [isMapelModalOpen, setIsMapelModalOpen] = useState(false);
   const [mapelDraft, setMapelDraft] = useState({ Mapel: "", Kode_Mapel: "" });
+  const [gabungEnabled, setGabungEnabled] = useState(false);
+  const [gabungClassKey, setGabungClassKey] = useState("");
+  const [gabungOptions, setGabungOptions] = useState<{ value: string; label: string }[]>([]);
   const [editingMapelOldName, setEditingMapelOldName] = useState<string | null>(null);
   const [mapelError, setMapelError] = useState("");
   
@@ -4066,6 +4069,13 @@ export function App() {
     });
     setCopyTargetDates([]);
     setConflictError("");
+    // prepare gabung options (classes from same cabang)
+    const options = monthScheduleGroups
+      .filter((g) => (g.cabang || "") === group.cabang)
+      .map((g) => ({ value: `${g.cabang}||${g.kelas}||${g.sekolah || ""}`, label: `${g.kelas}${g.sekolah ? ` • ${g.sekolah}` : ""}` }));
+    setGabungOptions(options);
+    setGabungEnabled(false);
+    setGabungClassKey("");
   };
 
   const handleSaveSlot = async () => {
@@ -4112,12 +4122,16 @@ export function App() {
         setConflictError("Jam mulai harus lebih awal daripada jam selesai.");
         return;
       }
-      const otherEntries = allScheduleEntries.filter(
-        (item) =>
-          item.id !== entryId &&
-          item.tanggal === tanggal &&
-          item.pengajar?.toLowerCase() === pengajarKey
-      );
+      const otherEntries = allScheduleEntries.filter((item) => {
+        if (item.id === entryId) return false;
+        if (item.tanggal !== tanggal) return false;
+        if ((item.pengajar || "").toLowerCase() !== pengajarKey) return false;
+        if (gabungEnabled && gabungClassKey) {
+          const itemKey = `${item.cabang}||${item.kelas}||${item.sekolah || ""}`;
+          if (itemKey === gabungClassKey) return false;
+        }
+        return true;
+      });
       for (const entry of otherEntries) {
         if (!entry.waktu) {
           continue;
@@ -4248,18 +4262,26 @@ export function App() {
       tanggalSheet: dateLabelByKey.get(dateKey) || dateKey,
       ...nextValues,
       catatan: "",
+      ...(gabungEnabled && gabungClassKey ? { isGabung: true, gabungWith: gabungClassKey } : {}),
     }));
     const copiedSheetRecords = validCopyDates.map((dateKey) =>
-      buildSheetRecord(
-        cabang,
-        kelas,
-        resolveSheetTanggal(dateLabelByKey.get(dateKey) || dateKey, dateKey),
-        nextValues.mapel,
-        nextValues.pengajar,
-        nextValues.waktu,
-        sekolahValue,
-        classOrderValue
-      )
+      ({
+        ...buildSheetRecord(
+          cabang,
+          kelas,
+          resolveSheetTanggal(dateLabelByKey.get(dateKey) || dateKey, dateKey),
+          nextValues.mapel,
+          nextValues.pengajar,
+          nextValues.waktu,
+          sekolahValue,
+          classOrderValue
+        ),
+        Gabung:
+          gabungEnabled && gabungClassKey
+            ? (gabungOptions.find((o) => o.value === gabungClassKey)?.label || gabungClassKey)
+            : "",
+        IsGabung: gabungEnabled ? "true" : "false",
+      })
     );
 
     const sheetRecord = buildSheetRecord(
@@ -4272,6 +4294,12 @@ export function App() {
       sekolahValue,
       classOrderValue
     );
+    // Attach gabung info so DB mapping can persist it
+    (sheetRecord as any).Gabung =
+      gabungEnabled && gabungClassKey
+        ? (gabungOptions.find((o) => o.value === gabungClassKey)?.label || gabungClassKey)
+        : "";
+    (sheetRecord as any).IsGabung = gabungEnabled ? "true" : "false";
 
     const oldSheetRecord = existingEntry
       ? buildSheetRecord(
@@ -4303,6 +4331,7 @@ export function App() {
                     classOrder: classOrderValue,
                     tanggal,
                     tanggalSheet: sheetRecord.Tanggal,
+                    ...(gabungEnabled && gabungClassKey ? { isGabung: true, gabungWith: gabungClassKey } : { isGabung: false, gabungWith: "" }),
                   }
                 : item
             ),
@@ -4323,6 +4352,7 @@ export function App() {
         tanggalSheet: sheetRecord.Tanggal,
         ...nextValues,
         catatan: "",
+        ...(gabungEnabled && gabungClassKey ? { isGabung: true, gabungWith: gabungClassKey } : {}),
       };
       return {
         ...prev,
@@ -4778,11 +4808,21 @@ export function App() {
         pengajarAvailableDateLabels={pengajarAvailabilityInfo.availableDateLabels}
         conflictError={conflictError}
         saving={sheetStatus.saving}
-        onClose={clearEditing}
+        onClose={() => {
+          clearEditing();
+          setGabungEnabled(false);
+          setGabungClassKey("");
+          setGabungOptions([]);
+        }}
         onDraftChange={handleDraftChange}
         onCopyDatesChange={setCopyTargetDates}
         onDelete={handleDeleteSlot}
         onSave={handleSaveSlot}
+        gabung={gabungEnabled}
+        gabungOptions={gabungOptions}
+        selectedGabung={gabungClassKey}
+        onToggleGabung={(next) => setGabungEnabled(next)}
+        onGabungChange={(next) => setGabungClassKey(next)}
       />
 
       <MapelModal

@@ -83,6 +83,9 @@ export function App() {
   const [classDraft, setClassDraft] = useState({ cabang: "", kelas: "", sekolah: "" });
   const [classError, setClassError] = useState("");
   const [conflictError, setConflictError] = useState("");
+  const [gabungEnabled, setGabungEnabled] = useState(false);
+  const [gabungClassKey, setGabungClassKey] = useState("");
+  const [gabungOptions, setGabungOptions] = useState<{ value: string; label: string }[]>([]);
   const [isMapelModalOpen, setIsMapelModalOpen] = useState(false);
   const [mapelDraft, setMapelDraft] = useState({ Mapel: "", Kode_Mapel: "" });
   const [editingMapelOldName, setEditingMapelOldName] = useState<string | null>(null);
@@ -741,6 +744,9 @@ export function App() {
     setEditingSlot(null);
     setDraft({ mapel: "", pengajar: "", waktuMulai: "", waktuSelesai: "" });
     setConflictError("");
+    setGabungEnabled(false);
+    setGabungClassKey("");
+    setGabungOptions([]);
   };
 
   const handleLoadFromSheet = async (scheduleKey: ScheduleMenuKey = "bulanIni") => {
@@ -1347,6 +1353,16 @@ export function App() {
       waktuSelesai: waktuParts[1] ?? "",
     });
     setConflictError("");
+    // prepare gabung options (classes from same cabang)
+    const options = monthScheduleGroups
+      .filter((g) => (g.cabang || "") === group.cabang)
+      .map((g) => ({
+        value: `${g.cabang}||${g.kelas}||${g.sekolah || ""}`,
+        label: `${g.kelas}${g.sekolah ? ` • ${g.sekolah}` : ""}`,
+      }));
+    setGabungOptions(options);
+    setGabungEnabled(false);
+    setGabungClassKey("");
   };
 
   const handleSaveSlot = async () => {
@@ -1373,12 +1389,17 @@ export function App() {
         setConflictError("Jam mulai harus lebih awal daripada jam selesai.");
         return;
       }
-      const otherEntries = allScheduleEntries.filter(
-        (item) =>
-          item.id !== entryId &&
-          item.tanggal === tanggal &&
-          item.pengajar?.toLowerCase() === pengajarKey
-      );
+      const otherEntries = allScheduleEntries.filter((item) => {
+        if (item.id === entryId) return false;
+        if (item.tanggal !== tanggal) return false;
+        if ((item.pengajar || "").toLowerCase() !== pengajarKey) return false;
+        // if gabung enabled and selected class matches this entry, ignore it for conflict checks
+        if (gabungEnabled && gabungClassKey) {
+          const itemKey = `${item.cabang}||${item.kelas}||${item.sekolah || ""}`;
+          if (itemKey === gabungClassKey) return false;
+        }
+        return true;
+      });
       for (const entry of otherEntries) {
         if (!entry.waktu) {
           continue;
@@ -1714,6 +1735,14 @@ export function App() {
         onDraftChange={handleDraftChange}
         onDelete={handleDeleteSlot}
         onSave={handleSaveSlot}
+        gabung={gabungEnabled}
+        gabungOptions={gabungOptions}
+        selectedGabung={gabungClassKey}
+        onToggleGabung={(next) => {
+          console.log("App onToggleGabung", next);
+          setGabungEnabled(next);
+        }}
+        onGabungChange={setGabungClassKey}
       />
 
       <MapelModal

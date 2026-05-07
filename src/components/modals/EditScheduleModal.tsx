@@ -1,4 +1,5 @@
 import Select from "react-select";
+import React, { useEffect, useState } from "react";
 import type { EditingSlot, SelectOption } from "../../types/app";
 
 type EditScheduleModalProps = {
@@ -23,6 +24,11 @@ type EditScheduleModalProps = {
   onCopyDatesChange: (values: string[]) => void;
   onDelete: () => void;
   onSave: () => void;
+  gabung?: boolean;
+  gabungOptions?: SelectOption[];
+  selectedGabung?: string;
+  onToggleGabung?: (next: boolean) => void;
+  onGabungChange?: (next: string) => void;
 };
 
 const compactSelectStyles = {
@@ -65,6 +71,11 @@ export function EditScheduleModal({
   onCopyDatesChange,
   onDelete,
   onSave,
+  gabung = false,
+  gabungOptions = [],
+  selectedGabung = "",
+  onToggleGabung,
+  onGabungChange,
 }: EditScheduleModalProps) {
   if (!editingSlot) {
     return null;
@@ -110,6 +121,57 @@ export function EditScheduleModal({
             isSearchable
             styles={compactSelectStyles}
           />
+          {/* local controlled checkbox for immediate UI feedback */}
+          {/** GabungCheckbox component */}
+          {
+            (() => {
+              function GabungCheckbox({ checked, onToggle }: { checked: boolean; onToggle: (next: boolean) => void; }) {
+                const [localChecked, setLocalChecked] = useState<boolean>(checked);
+                useEffect(() => setLocalChecked(checked), [checked]);
+                return (
+                  <div className="form-check form-check-inline mt-2">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="gabungCheck"
+                      checked={localChecked}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        console.log("GabungCheckbox onChange", next);
+                        setLocalChecked(next);
+                        onToggle(next);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <label className="form-check-label small" htmlFor="gabungCheck">
+                      Gabung
+                    </label>
+                  </div>
+                );
+              }
+
+              return (
+                <GabungCheckbox checked={gabung} onToggle={(next) => onToggleGabung && onToggleGabung(next)} />
+              );
+            })()
+          }
+          {gabung && (
+            <div className="mt-2">
+              <label className="form-label small fw-semibold">Pilih Kelas Gabung (sama cabang)</label>
+              <Select
+                value={
+                  selectedGabung
+                    ? gabungOptions.find((opt) => opt.value === selectedGabung) || { value: selectedGabung, label: selectedGabung }
+                    : null
+                }
+                onChange={(opt) => onGabungChange && onGabungChange(opt?.value || "")}
+                options={gabungOptions}
+                placeholder="Pilih kelas dari cabang..."
+                isClearable
+                styles={compactSelectStyles}
+              />
+            </div>
+          )}
           <label className="form-label small fw-semibold mt-3">Pengajar</label>
           <Select
             value={

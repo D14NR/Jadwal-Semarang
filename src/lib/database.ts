@@ -46,6 +46,12 @@ const asNumberOrNull = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const asBoolean = (value: unknown) => {
+  if (value === undefined || value === null) return false;
+  const raw = String(value).trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "t" || raw === "yes" || raw === "y";
+};
+
 const asTimestampOrNull = (value: unknown) => {
   if (value === undefined || value === null) {
     return null;
@@ -73,6 +79,8 @@ const schemas: Record<BucketName, BucketSchema> = {
       Pengajar: asString(row.pengajar),
       Waktu: asString(row.waktu),
       "Urutan Kelas": asString(row.class_order),
+      Gabung: asString((row as any).gabung),
+      IsGabung: asString((row as any).is_gabung),
     }),
     toDb: (data) => ({
       cabang: asString(data.Cabang),
@@ -83,6 +91,8 @@ const schemas: Record<BucketName, BucketSchema> = {
       pengajar: asString(data.Pengajar),
       waktu: asString(data.Waktu),
       class_order: asNumberOrNull(data["Urutan Kelas"]),
+      gabung: asString((data as any).Gabung || (data as any).gabung),
+      is_gabung: asBoolean((data as any).IsGabung || (data as any).is_gabung || (data as any).isGabung),
     }),
   },
   jadwal_khusus: {
@@ -96,6 +106,8 @@ const schemas: Record<BucketName, BucketSchema> = {
       Pengajar: asString(row.pengajar),
       Waktu: asString(row.waktu),
       "Urutan Kelas": asString(row.class_order),
+      Gabung: asString((row as any).gabung),
+      IsGabung: asString((row as any).is_gabung),
     }),
     toDb: (data) => ({
       cabang: asString(data.Cabang),
@@ -106,6 +118,8 @@ const schemas: Record<BucketName, BucketSchema> = {
       pengajar: asString(data.Pengajar),
       waktu: asString(data.Waktu),
       class_order: asNumberOrNull(data["Urutan Kelas"]),
+      gabung: asString((data as any).Gabung || (data as any).gabung),
+      is_gabung: asBoolean((data as any).IsGabung || (data as any).is_gabung || (data as any).isGabung),
     }),
   },
   mata_pelajaran: {

@@ -15,7 +15,11 @@ export type CategoryConfig = {
 
 export type RecordItem = {
   id: string;
-  [key: string]: string;
+  // Standard string fields (cabang, kelas, mapel, pengajar, waktu, etc.)
+  [key: string]: string | undefined | boolean | any;
+  // Optional gabung metadata
+  gabungWith?: string; // serialized key: "cabang||kelas||sekolah"
+  isGabung?: boolean;
 };
 
 export type SelectOption = {

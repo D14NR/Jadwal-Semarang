@@ -333,6 +333,15 @@ export function ScheduleTableView({
                                     <span className="name-chip" style={getTagStyle(item.mapel || `Sesi ${itemIndex + 1}`, "mapel")}>
                                       {item.mapel || `Sesi ${itemIndex + 1}`}
                                     </span>
+                                    {item.isGabung ? (
+                                      <span
+                                        className="badge bg-info ms-1 text-xxs"
+                                        title={item.gabungWith ? `Gabung dengan: ${String(item.gabungWith).split("||")[1] || ""}` : "Gabung"}
+                                        style={{ fontSize: "0.65rem", verticalAlign: "middle" }}
+                                      >
+                                        Gabung
+                                      </span>
+                                    ) : null}
                                   </div>
                                   <div className="text-xxs mt-1">
                                     {item.pengajar ? (
