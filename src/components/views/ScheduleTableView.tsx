@@ -332,11 +332,24 @@ export function ScheduleTableView({
                                   <div className="fw-semibold text-xxs">
                                     <span className="name-chip" style={getTagStyle(item.mapel || `Sesi ${itemIndex + 1}`, "mapel")}>
                                       {item.mapel || `Sesi ${itemIndex + 1}`}
+                                      {item.isGabung && item.gabungWith ? (
+                                        <span className="ms-1">
+                                          {' ('}
+                                          {String(item.gabungWith).includes("||")
+                                            ? String(item.gabungWith).split("||")[1]
+                                            : String(item.gabungWith)}
+                                          {') '}
+                                        </span>
+                                      ) : null}
                                     </span>
                                     {item.isGabung ? (
                                       <span
                                         className="badge bg-info ms-1 text-xxs"
-                                        title={item.gabungWith ? `Gabung dengan: ${String(item.gabungWith).split("||")[1] || ""}` : "Gabung"}
+                                        title={
+                                          item.gabungWith
+                                            ? `Gabung dengan: ${String(item.gabungWith).includes("||") ? String(item.gabungWith).split("||")[1] : String(item.gabungWith)}`
+                                            : "Gabung"
+                                        }
                                         style={{ fontSize: "0.65rem", verticalAlign: "middle" }}
                                       >
                                         Gabung

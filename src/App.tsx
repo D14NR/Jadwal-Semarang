@@ -881,6 +881,10 @@ export function App() {
         const tanggal = normalizeDateValue(tanggalRaw);
         const tanggalSheet = resolveSheetTanggal(tanggalRaw, tanggal);
         const classOrder = parseClassOrder(classOrderRaw);
+        const gabungWith = getEntryValue(row, ["Gabung"]);
+        const isGabungRaw = getEntryValue(row, ["IsGabung"]);
+        const isGabung =
+          ["true", "1", "ya", "yes"].includes(normalizeValueKey(isGabungRaw)) || Boolean(gabungWith);
 
         if (!cabang && !kelas && !sekolah && !tanggal && !mapel && !pengajar && !waktu) {
           return acc;
@@ -898,6 +902,8 @@ export function App() {
           waktu,
           classOrder: classOrder === null ? "" : String(classOrder),
           catatan: "",
+          isGabung,
+          gabungWith,
         });
 
         return acc;
@@ -1693,7 +1699,12 @@ export function App() {
         if (!kodePengajar || !tanggalLabel || !mapel || !waktu) {
           return;
         }
-        const kelasLabel = [kelas, sekolah].filter(Boolean).join(" ");
+        const kelasBaseLabel = [kelas, sekolah].filter(Boolean).join(" ");
+        const gabungLabel = (item.isGabung || item.gabungWith) ? String(item.gabungWith || "").trim() : "";
+        const formattedGabungLabel = gabungLabel
+          ? ` (${gabungLabel.replace(/^\(+|\)+$/g, "")})`
+          : "";
+        const kelasLabel = `${kelasBaseLabel}${formattedGabungLabel}`;
         const updateLabel = formatUpdatedLabel(item.updatedAt || item.createdAt);
         const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}${
           updateLabel ? ` ${updateLabel}` : ""
