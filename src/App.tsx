@@ -92,7 +92,7 @@ export function App() {
     "Permintaan Pengajar Antar Cabang": "permintaan_pengajar",
   } as const;
 
-  const toRecord = (row: DbRow) => row.data;
+  const toRecord = (row: DbRow) => row.data || {};
   const normalizeValueKey = (value: unknown) => String(value ?? "").trim().toLowerCase();
   const matchByFields = (
     source: Record<string, string>,

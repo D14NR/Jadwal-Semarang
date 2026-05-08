@@ -50,8 +50,11 @@ export function DashboardView({
   todaySchedules,
   izinRequests,
   canManageIzin,
+  canManagePermintaan,
   onApproveIzin,
   onRejectIzin,
+  onApprovePermintaan,
+  onRejectPermintaan,
 }: DashboardViewProps) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

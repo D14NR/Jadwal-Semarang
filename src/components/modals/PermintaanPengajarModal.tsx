@@ -97,6 +97,11 @@ export function PermintaanPengajarModal({
                   cabangTujuan: domisili,
                 });
               }}
+              classNamePrefix="react-select"
+              menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+              menuPosition="absolute"
+              styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+              noOptionsMessage={() => "Data pengajar tidak ditemukan"}
             />
           </div>
 
