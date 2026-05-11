@@ -59,14 +59,9 @@ export function DashboardView({
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const visibleIzinRequests = (izinRequests || []).filter((item) => {
-    const endRaw = item.tanggalSelesai || item.tanggalMulai || "";
-    const parsed = parseFlexibleDate(String(endRaw || ""));
-    if (!parsed) return true; // keep when unsure
-    // include if end of day is >= today
-    parsed.setHours(23, 59, 59, 999);
-    return parsed >= todayStart;
-  });
+  // Show all izin requests regardless of date status
+  // (both active and expired records should be visible)
+  const visibleIzinRequests = (izinRequests || []);
 
   return (
     <div className="mt-3">

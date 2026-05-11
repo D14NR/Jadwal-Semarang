@@ -94,7 +94,23 @@ export function App() {
     source: Record<string, string>,
     target: Record<string, string>,
     fields: string[]
-  ) => fields.every((field) => normalizeValueKey(source[field]) === normalizeValueKey(target[field]));
+  ) =>
+    fields.every((field) => {
+      const sRaw = String(source[field] ?? "").trim();
+      const tRaw = String(target[field] ?? "").trim();
+      if (field.toLowerCase().includes("tanggal")) {
+        if (!sRaw || !tRaw) {
+          return false;
+        }
+        const sDate = parseFlexibleDate(sRaw);
+        const tDate = parseFlexibleDate(tRaw);
+        if (sDate && tDate) {
+          return formatLocalDate(sDate) === formatLocalDate(tDate);
+        }
+        return normalizeValueKey(sRaw) === normalizeValueKey(tRaw);
+      }
+      return normalizeValueKey(sRaw) === normalizeValueKey(tRaw);
+    });
 
   const [activeKey, setActiveKey] = useState(categories[0].key);
   const [records, setRecords] = useState<Record<string, RecordItem[]>>(initialRecords);
@@ -1533,9 +1549,22 @@ export function App() {
 
   const filteredIzinRecords = useMemo(() => {
     const source = restrictedCabang
-      ? izinRecords.filter(
-          (record) => normalizeText(record.Domisili || "") === normalizeText(restrictedCabang)
-        )
+      ? izinRecords.filter((record) => {
+          const domisiliRaw = record.Domisili || "";
+          // Handle multiple domisili values separated by comma
+          const domisiliList = domisiliRaw
+            .split(/[,;]/)
+            .map((d) => normalizeText(d))
+            .filter(Boolean);
+          
+          if (domisiliList.length === 0) {
+            return false; // No valid domisili
+          }
+          
+          // Check if restrictedCabang matches any of the domisili values
+          const cabangKey = normalizeText(restrictedCabang);
+          return domisiliList.some((d) => d === cabangKey);
+        })
       : izinRecords;
     if (!query.trim()) {
       return source;
@@ -2605,6 +2634,7 @@ export function App() {
     setIzinStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
       const rows = await listRows(dataBucket["Izin Pengajar"]);
+      console.debug("[debug] loaded izin rows count:", rows.length);
       const normalized = rows
         .map((row) => ({ ...toRecord(row), _id: row.id }))
         .map((record) => normalizeIzinRecord(record))
@@ -2613,6 +2643,7 @@ export function App() {
             ? normalizeText(record.Domisili || "") === normalizeText(restrictedCabang)
             : true
         );
+      console.debug("[debug] normalized izin records count:", normalized.length);
       setIzinRecords(normalized);
       setIzinStatus({
         loading: false,
@@ -2786,9 +2817,11 @@ export function App() {
     setPermintaanStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
       const rows = await listRows(dataBucket["Permintaan Pengajar Antar Cabang"]);
+      console.debug("[debug] loaded permintaan rows count:", rows.length);
       const normalized = rows
         .map((row) => toRecord(row))
         .map((record) => normalizePermintaanRecord(record));
+      console.debug("[debug] normalized permintaan records count:", normalized.length, "restrictedCabang=", restrictedCabang);
       setPermintaanRecords(normalized);
       setPermintaanStatus({
         loading: false,
@@ -3813,7 +3846,14 @@ export function App() {
     Kelas: kelas,
     ...(sekolah ? { Sekolah: sekolah } : {}),
     ...(String(classOrder).trim() ? { "Urutan Kelas": String(classOrder).trim() } : {}),
-    Tanggal: formatSheetTanggal(tanggalSheet),
+    // Normalize Tanggal to YYYY-MM-DD when possible to avoid ambiguous matching across months
+    Tanggal: ((): string => {
+      const parsed = parseFlexibleDate(tanggalSheet || "");
+      if (parsed) return formatLocalDate(parsed);
+      const parsedLabel = parseFlexibleDate(formatSheetTanggal(tanggalSheet));
+      if (parsedLabel) return formatLocalDate(parsedLabel);
+      return formatSheetTanggal(tanggalSheet);
+    })(),
     Mapel: mapel,
     Pengajar: pengajar,
     Waktu: waktu,
@@ -3967,7 +4007,9 @@ export function App() {
           const rows = await listRows(targetBucket);
           const targetIds = rows
             .filter((row) => {
-              const parsed = parseFlexibleDate(row.data.Tanggal || "");
+              const raw = row.data || {};
+              const tanggalStr = (raw.Tanggal as string) || (raw.tanggal as string) || (raw.tanggalSheet as string) || "";
+              const parsed = parseFlexibleDate(tanggalStr || "");
               if (!parsed) {
                 return false;
               }
