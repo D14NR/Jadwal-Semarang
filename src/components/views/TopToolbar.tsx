@@ -25,7 +25,6 @@ type TopToolbarProps = {
   onMonthChange: (value: string) => void;
   onSuratMonthChange: (value: string) => void;
   onSuratKodeChange: (value: string) => void;
-  onCopyScheduleToNextMonth?: () => void;
   topToolbarMessage?: string;
 };
 
@@ -53,7 +52,6 @@ export function TopToolbar({
   onMonthChange,
   onSuratMonthChange,
   onSuratKodeChange,
-  onCopyScheduleToNextMonth,
   topToolbarMessage,
 }: TopToolbarProps) {
   return (
@@ -204,16 +202,7 @@ export function TopToolbar({
       </div>
 
       <div className="d-flex flex-wrap align-items-center gap-2">
-        {activeKey === "bulanIni" && onCopyScheduleToNextMonth && (
-          <button
-            className="btn btn-sm btn-outline-primary"
-            onClick={onCopyScheduleToNextMonth}
-            disabled={sheetStatus.saving || sheetStatus.loading}
-            title="Copy jadwal dari bulan saat ini ke bulan berikutnya"
-          >
-            📋 Copy ke Bulan Depan
-          </button>
-        )}
+        {/* Copy to next month removed */}
         
         {(activeKey === "bulanIni" || activeKey === "jadwalTambahanPelayanan") && sheetStatus.saving && (
           <span className="text-primary small fw-semibold">Menyimpan ke Database...</span>

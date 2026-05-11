@@ -56,11 +56,7 @@ import {
   parseRangeFromString,
   parseTimeValue,
 } from "./utils/schedule";
-import {
-  copyScheduleToNextMonth,
-  filterScheduleByMonth,
-  getNextMonthKey,
-} from "./utils/copySchedule";
+// copySchedule feature removed
 import { setNationalHolidays as setLocalNationalHolidays } from "./config/holidays";
 import {
   deleteRowsByIds,
@@ -1103,13 +1099,31 @@ export function App() {
   };
 
   const monthScheduleGroupsAll = useMemo(
-    () => buildScheduleGroups(records[activeScheduleKey] ?? [], selectedScheduleCabang, ""),
-    [activeScheduleKey, records, selectedScheduleCabang]
+    () => {
+      const source = records[activeScheduleKey] ?? [];
+      if (isJadwalTambahanMenu) {
+        return buildScheduleGroups(source, selectedScheduleCabang, "");
+      }
+      const filtered = source.filter((item) => {
+        const tanggal = (item.tanggal as string) || (item.Tanggal as string) || "";
+        return tanggal.slice(0, 7) === selectedMonthKey;
+      });
+      return buildScheduleGroups(filtered, selectedScheduleCabang, "");
+    },
+    [activeScheduleKey, records, selectedScheduleCabang, isJadwalTambahanMenu, selectedMonthKey]
   );
 
   const monthScheduleGroups = useMemo(() => {
-    return buildScheduleGroups(records[activeScheduleKey] ?? [], selectedScheduleCabang, query);
-  }, [activeScheduleKey, query, records, selectedScheduleCabang]);
+    const source = records[activeScheduleKey] ?? [];
+    if (isJadwalTambahanMenu) {
+      return buildScheduleGroups(source, selectedScheduleCabang, query);
+    }
+    const filtered = source.filter((item) => {
+      const tanggal = (item.tanggal as string) || (item.Tanggal as string) || "";
+      return tanggal.slice(0, 7) === selectedMonthKey;
+    });
+    return buildScheduleGroups(filtered, selectedScheduleCabang, query);
+  }, [activeScheduleKey, query, records, selectedScheduleCabang, isJadwalTambahanMenu, selectedMonthKey]);
 
   const tambahanPrintGroups = useMemo(() => {
     return buildScheduleGroups(records.jadwalTambahanPelayanan ?? [], restrictedCabang, "");
@@ -1863,6 +1877,35 @@ export function App() {
       const targetSheet = scheduleSheetByKey[scheduleKey];
       const bucket = dataBucket[targetSheet];
       const rows = await listRows(bucket);
+      // If loading jadwal tambahan, cleanup any rows with dates in the past
+      if (scheduleKey === "jadwalTambahanPelayanan") {
+        const todayKey = formatLocalDate(new Date());
+        const expiredIds: string[] = [];
+        rows.forEach((row) => {
+          const raw = toRecord(row);
+          const tanggalStr = (raw.Tanggal as string) || (raw.tanggal as string) || "";
+          const parsed = parseFlexibleDate(tanggalStr);
+          if (parsed) {
+            const parsedKey = formatLocalDate(parsed);
+            if (parsedKey < todayKey) {
+              expiredIds.push(row.id);
+            }
+          }
+        });
+        if (expiredIds.length > 0) {
+          try {
+            await deleteRowsByIds(expiredIds);
+            // remove deleted rows from fetched list
+            for (const id of expiredIds) {
+              const idx = rows.findIndex((r) => r.id === id);
+              if (idx >= 0) rows.splice(idx, 1);
+            }
+            pushToast(`${expiredIds.length} jadwal Tambahan kedaluwarsa telah dihapus.`, "info");
+          } catch (err) {
+            console.error("Failed to cleanup expired tambahan rows:", err);
+          }
+        }
+      }
       const parsedRecords = rows.map((row, index) => {
         const item = parseAppsScriptRecords([toRecord(row)])[0];
         return {
@@ -3783,86 +3826,7 @@ export function App() {
     return Promise.resolve();
   };
 
-  const handleCopyScheduleToNextMonth = () => {
-    if (isScheduleReadOnly) {
-      pushToast("Mode lihat cabang lain aktif. Anda tidak dapat menyalin jadwal.", "error");
-      return;
-    }
-
-    const nextMonthKey = getNextMonthKey(selectedMonthKey);
-    const currentMonthRecords = filterScheduleByMonth(records[activeScheduleKey] ?? [], selectedMonthKey);
-
-    if (currentMonthRecords.length === 0) {
-      pushToast("Tidak ada jadwal untuk disalin dari bulan ini.", "info");
-      return;
-    }
-
-    openConfirmDialog(
-      `Salin jadwal dari bulan ini ke bulan ${new Date(Number(nextMonthKey.split("-")[0]), Number(nextMonthKey.split("-")[1]) - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" })}? Jadwal yang sudah ada di bulan tujuan tidak akan dihapus.`,
-      async () => {
-        try {
-          setSheetStatus((prev) => ({ ...prev, saving: true, error: "" }));
-
-          // Copy jadwal dengan menyesuaikan tanggal
-          const copiedRecords = copyScheduleToNextMonth(
-            currentMonthRecords,
-            selectedMonthKey,
-            nextMonthKey
-          );
-
-          if (copiedRecords.length === 0) {
-            pushToast("Tidak ada jadwal yang dapat disalin.", "info");
-            setSheetStatus((prev) => ({ ...prev, saving: false }));
-            return;
-          }
-
-          // Prepare sheet records (format untuk sheet)
-          const copiedSheetRecords = copiedRecords.map((record) => {
-            // Extract field values - handle both uppercase and lowercase field names
-            const cabang = (record.Cabang as string) || (record.cabang as string) || "";
-            const kelas = (record.Kelas as string) || (record.kelas as string) || "";
-            const tanggal = (record.Tanggal as string) || (record.tanggal as string) || "";
-            const mapel = (record.Mapel as string) || (record.mapel as string) || "";
-            const pengajar = (record.Pengajar as string) || (record.pengajar as string) || "";
-            const waktu = (record.Waktu as string) || (record.waktu as string) || "";
-            const sekolah = (record.Sekolah as string) || (record.sekolah as string) || "";
-            const classOrder = (record["Urutan Kelas"] as string) || (record.classOrder as string) || "";
-
-            return buildSheetRecord(
-              cabang,
-              kelas,
-              tanggal,
-              mapel,
-              pengajar,
-              waktu,
-              sekolah,
-              classOrder
-            );
-          });
-
-          // Save ke database dengan appendMany
-          await postToSheet(
-            { action: "appendMany", records: copiedSheetRecords },
-            activeScheduleKey
-          );
-
-          // Update local state
-          setRecords((prev) => ({
-            ...prev,
-            [activeScheduleKey]: [...(prev[activeScheduleKey] ?? []), ...copiedRecords],
-          }));
-
-          pushToast(`${copiedRecords.length} jadwal berhasil disalin ke bulan berikutnya.`, "success");
-          setSheetStatus((prev) => ({ ...prev, saving: false }));
-        } catch (error) {
-          console.error("Error copying schedule:", error);
-          pushToast("Gagal menyalin jadwal.", "error");
-          setSheetStatus((prev) => ({ ...prev, saving: false, error: "Gagal menyalin jadwal." }));
-        }
-      },
-      { title: "Salin Jadwal", confirmLabel: "Ya, Salin" }
-    );
-  };
+  // copy-to-next-month feature removed
 
   const postToSheet = async (
     payload: Record<string, unknown>,
@@ -4606,7 +4570,6 @@ export function App() {
                     setSelectedSuratTugasKode("");
                   }}
                   onSuratKodeChange={setSelectedSuratTugasKode}
-                  onCopyScheduleToNextMonth={handleCopyScheduleToNextMonth}
                 />
                 {(activeKey === "bulanIni" ||
                   activeKey === "jadwalTambahanPelayanan" ||
