@@ -1607,8 +1607,7 @@ export function App() {
       }));
   }, [filteredPermintaanRecords]);
 
-  const dashboardTodaySchedules = useMemo(() => {
-    const todayKey = formatLocalDate(new Date());
+  const dashboardScheduleItems = useMemo(() => {
     const scheduleItems: Array<RecordItem & { sourceLabel: string }> = [
       ...(records.bulanIni ?? []).map((item) => ({ ...item, sourceLabel: "Jadwal Reguler" })),
       ...(records.jadwalTambahanPelayanan ?? []).map((item) => ({ ...item, sourceLabel: "Jadwal Tambahan & Pelayanan" })),
@@ -1618,9 +1617,6 @@ export function App() {
       .filter((item) => {
         const parsedDate = parseFlexibleDate(item["tanggalSheet"] || item["tanggal"] || "");
         if (!parsedDate) {
-          return false;
-        }
-        if (formatLocalDate(parsedDate) !== todayKey) {
           return false;
         }
         if (!(item["mapel"] || "").trim() && !(item["pengajar"] || "").trim() && !(item["waktu"] || "").trim()) {
@@ -1638,6 +1634,7 @@ export function App() {
       })
       .map((item, index) => ({
         id: item.id || `${item.sourceLabel}-${index}`,
+        tanggal: item["tanggalSheet"] || item["tanggal"] || "",
         waktu: item["waktu"] || "",
         mapel: item["mapel"] || "",
         pengajar: item["pengajar"] || "",
@@ -4669,7 +4666,7 @@ export function App() {
                   <DashboardView
                     loading={sheetStatus.loading || permintaanStatus.loading || izinStatus.loading}
                     pendingRequests={dashboardPendingRequests}
-                    todaySchedules={dashboardTodaySchedules}
+                    dashboardSchedules={dashboardScheduleItems}
                     izinRequests={dashboardIzinRequests}
                     canManageIzin={Boolean(authSession)}
                     canManagePermintaan={Boolean(authSession)}
