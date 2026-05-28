@@ -450,7 +450,7 @@ export function App() {
 
   const mapelOptions = useMemo(() => {
     return mapelRecords.map((record) => ({
-      value: record["Kode_Mapel"] || record["Singkatan"] || "",
+      value: record["Mapel"] || record["Mata Pelajaran"] || "",
       label: `${record["Kode_Mapel"] || record["Singkatan"] || ""} - ${record["Mapel"] || record["Mata Pelajaran"] || ""}`
     })).filter(opt => opt.value);
   }, [mapelRecords]);

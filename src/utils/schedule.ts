@@ -43,12 +43,26 @@ export const formatLocalDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-export const formatScheduleLabel = (date: Date) =>
-  date.toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+const monthNamesShortId = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "mei",
+  "jun",
+  "jul",
+  "agu",
+  "sep",
+  "okt",
+  "nov",
+  "des",
+];
+
+export const formatScheduleLabel = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = monthNamesShortId[date.getMonth()] ?? "";
+  return `${day} ${month} ${date.getFullYear()}`;
+};
 
 export const formatScheduleLabelWithDay = (date: Date) => {
   const weekday = date.toLocaleDateString("id-ID", { weekday: "long" });

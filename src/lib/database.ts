@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { formatLocalDate, parseFlexibleDate } from "../utils/schedule";
 
 export type DbRow = {
   id: string;
@@ -65,6 +66,15 @@ const asTimestampOrNull = (value: unknown) => {
     return null;
   }
   return parsed.toISOString();
+};
+
+const normalizeDbDate = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  const parsed = parseFlexibleDate(raw);
+  return parsed ? formatLocalDate(parsed) : raw;
 };
 
 const schemas: Record<BucketName, BucketSchema> = {
@@ -174,7 +184,7 @@ const schemas: Record<BucketName, BucketSchema> = {
     }),
     toDb: (data) => ({
       kode_pengajar: asString(data["Kode Pengajar"]),
-      tanggal: asString(data.Tanggal),
+      tanggal: normalizeDbDate(data.Tanggal),
       sesi_1: asString(data["Sesi 1"]),
       sesi_2: asString(data["Sesi 2"]),
       sesi_3: asString(data["Sesi 3"]),
@@ -194,7 +204,7 @@ const schemas: Record<BucketName, BucketSchema> = {
       Label: asString(row.label),
     }),
     toDb: (data) => ({
-      tanggal: asString(data.Tanggal),
+      tanggal: normalizeDbDate(data.Tanggal),
       label: asString(data.Label),
     }),
   },
@@ -237,8 +247,8 @@ const schemas: Record<BucketName, BucketSchema> = {
       kode_pengajar: asString(data["Kode Pengajar"]),
       nama_pengajar: asString(data["Nama Pengajar"]),
       domisili: asString(data.Domisili),
-      tanggal_mulai: asString(data["Tanggal Mulai"]),
-      tanggal_selesai: asString(data["Tanggal Selesai"]),
+      tanggal_mulai: normalizeDbDate(data["Tanggal Mulai"]),
+      tanggal_selesai: normalizeDbDate(data["Tanggal Selesai"]),
       keterangan: asString(data.Keterangan),
       keterangan_status: asString(data["Keterangan Status"] || data.Status || "Menunggu"),
       diputuskan_oleh: asString(data["Diputuskan Oleh"]),
@@ -269,9 +279,9 @@ const schemas: Record<BucketName, BucketSchema> = {
       nama_pengajar: asString(data["Nama Pengajar"]),
       cabang_peminta: asString(data["Cabang Peminta"]),
       cabang_domisili: asString(data["Cabang Domisili"]),
-      tanggal_mulai: asString(data["Tanggal Mulai"]),
-      tanggal_selesai: asString(data["Tanggal Selesai"]),
-      tanggal_khusus: asString(data["Tanggal Khusus"]),
+      tanggal_mulai: normalizeDbDate(data["Tanggal Mulai"]),
+      tanggal_selesai: normalizeDbDate(data["Tanggal Selesai"]),
+      tanggal_khusus: normalizeDbDate(data["Tanggal Khusus"]),
       hari_tersedia: asString(data.Hari),
       jam_mulai: asString(data["Jam Mulai"]),
       jam_selesai: asString(data["Jam Selesai"]),
