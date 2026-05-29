@@ -181,7 +181,7 @@ export function App() {
   const [isMapelModalOpen, setIsMapelModalOpen] = useState(false);
   const [mapelDraft, setMapelDraft] = useState({ Mapel: "", Kode_Mapel: "" });
   const [gabungEnabled, setGabungEnabled] = useState(false);
-  const [gabungClassKey, setGabungClassKey] = useState("");
+  const [gabungClassKeys, setGabungClassKeys] = useState<string[]>([]);
   const [gabungOptions, setGabungOptions] = useState<{ value: string; label: string }[]>([]);
   const [editingMapelOldName, setEditingMapelOldName] = useState<string | null>(null);
   const [mapelError, setMapelError] = useState("");
@@ -3572,6 +3572,12 @@ export function App() {
     }
 
     const hasDuplicate = (records[activeScheduleKey] ?? []).some((item) => {
+      if (activeScheduleKey !== "jadwalTambahanPelayanan") {
+        const tanggal = (item.tanggal as string) || (item.Tanggal as string) || "";
+        if (tanggal.slice(0, 7) !== selectedMonthKey) {
+          return false;
+        }
+      }
       const isCurrentClass =
         item.cabang === group.cabang &&
         item.kelas === group.kelas &&
@@ -3666,12 +3672,20 @@ export function App() {
       return;
     }
 
-    const existing = (records[activeScheduleKey] ?? []).some(
-      (item) =>
-        item.cabang === cabang &&
-        item.kelas === kelas &&
-        (shouldRequireSekolah ? (item.sekolah || "") === sekolah : true)
-    );
+    const existing = (records[activeScheduleKey] ?? [])
+      .filter((item) => {
+        if (activeScheduleKey === "jadwalTambahanPelayanan") {
+          return true;
+        }
+        const tanggal = (item.tanggal as string) || (item.Tanggal as string) || "";
+        return tanggal.slice(0, 7) === selectedMonthKey;
+      })
+      .some(
+        (item) =>
+          item.cabang === cabang &&
+          item.kelas === kelas &&
+          (shouldRequireSekolah ? (item.sekolah || "") === sekolah : true)
+      );
     if (existing) {
       setClassError("Kelas tersebut sudah ada di jadwal.");
       return;
@@ -4066,7 +4080,7 @@ export function App() {
     ) {
       return;
     }
-    const waktuParts = targetEntry?.waktu ? targetEntry.waktu.split("-").map((part) => part.trim()) : [];
+    const waktuParts = targetEntry?.waktu ? targetEntry.waktu.split("-").map((part: string) => part.trim()) : [];
     setEditingSlot({
       cabang: group.cabang,
       kelas: group.kelas,
@@ -4086,10 +4100,28 @@ export function App() {
     // prepare gabung options (classes from same cabang)
     const options = monthScheduleGroups
       .filter((g) => (g.cabang || "") === group.cabang)
-      .map((g) => ({ value: `${g.cabang}||${g.kelas}||${g.sekolah || ""}`, label: `${g.kelas}${g.sekolah ? ` • ${g.sekolah}` : ""}` }));
+      .map((g) => ({
+        value: buildClassGroupKey(g.cabang || "", g.kelas || "", g.sekolah || ""),
+        label: `${g.kelas}${g.sekolah ? ` • ${g.sekolah}` : ""}`,
+      }));
+    const initialGabungKeys = (targetEntry?.isGabung && targetEntry?.gabungWith)
+      ? String(targetEntry.gabungWith)
+          .split(";")
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .map((value) => {
+            const matchedByValue = options.find((opt) => opt.value === value);
+            if (matchedByValue) {
+              return matchedByValue.value;
+            }
+            const matchedByLabel = options.find((opt) => normalizeText(opt.label) === normalizeText(value));
+            return matchedByLabel ? matchedByLabel.value : value;
+          })
+      : [];
+
     setGabungOptions(options);
-    setGabungEnabled(false);
-    setGabungClassKey("");
+    setGabungEnabled(initialGabungKeys.length > 0);
+    setGabungClassKeys(initialGabungKeys);
   };
 
   const handleSaveSlot = async () => {
@@ -4136,13 +4168,34 @@ export function App() {
         setConflictError("Jam mulai harus lebih awal daripada jam selesai.");
         return;
       }
+      const selectedGabungKeySet = new Set(gabungClassKeys);
+      const keptGabungLabelSet = new Set(
+        gabungOptions
+          .filter((opt) => gabungClassKeys.includes(opt.value))
+          .map((opt) => normalizeText(opt.label))
+      );
+      const currentClassKey = buildClassGroupKey(cabang, kelas, sekolahValue);
+      const currentClassLabel = normalizeText(`${kelas}${sekolahValue ? ` • ${sekolahValue}` : ""}`);
+      const ignoreClassKeySet = new Set([...selectedGabungKeySet, currentClassKey]);
+      const ignoreLabelSet = new Set([...keptGabungLabelSet, currentClassLabel]);
       const otherEntries = allScheduleEntries.filter((item) => {
         if (item.id === entryId) return false;
         if (item.tanggal !== tanggal) return false;
         if ((item.pengajar || "").toLowerCase() !== pengajarKey) return false;
-        if (gabungEnabled && gabungClassKey) {
-          const itemKey = `${item.cabang}||${item.kelas}||${item.sekolah || ""}`;
-          if (itemKey === gabungClassKey) return false;
+        if (gabungEnabled && ignoreClassKeySet.size > 0) {
+          const itemKey = buildClassGroupKey(item.cabang || "", item.kelas || "", item.sekolah || "");
+          if (ignoreClassKeySet.has(itemKey)) return false;
+          const itemGabungParts = String(item.gabungWith || "")
+            .split(";")
+            .map((value) => normalizeText(value))
+            .filter(Boolean);
+          if (
+            itemGabungParts.some(
+              (value) => ignoreClassKeySet.has(value) || ignoreLabelSet.has(value)
+            )
+          ) {
+            return false;
+          }
         }
         return true;
       });
@@ -4266,6 +4319,8 @@ export function App() {
       }
     }
 
+    const joinedGabungWithValue = gabungEnabled && gabungClassKeys.length > 0 ? gabungClassKeys.join("; ") : "";
+
     const copiedItems: RecordItem[] = validCopyDates.map((dateKey, index) => ({
       id: `${activeScheduleKey}-${Date.now()}-${index + 1000}`,
       cabang,
@@ -4276,7 +4331,7 @@ export function App() {
       tanggalSheet: dateLabelByKey.get(dateKey) || dateKey,
       ...nextValues,
       catatan: "",
-      ...(gabungEnabled && gabungClassKey ? { isGabung: true, gabungWith: gabungClassKey } : {}),
+      ...(joinedGabungWithValue ? { isGabung: true, gabungWith: joinedGabungWithValue } : {}),
     }));
     const copiedSheetRecords = validCopyDates.map((dateKey) =>
       ({
@@ -4290,10 +4345,7 @@ export function App() {
           sekolahValue,
           classOrderValue
         ),
-        Gabung:
-          gabungEnabled && gabungClassKey
-            ? (gabungOptions.find((o) => o.value === gabungClassKey)?.label || gabungClassKey)
-            : "",
+        Gabung: joinedGabungWithValue,
         IsGabung: gabungEnabled ? "true" : "false",
       })
     );
@@ -4309,10 +4361,7 @@ export function App() {
       classOrderValue
     );
     // Attach gabung info so DB mapping can persist it
-    (sheetRecord as any).Gabung =
-      gabungEnabled && gabungClassKey
-        ? (gabungOptions.find((o) => o.value === gabungClassKey)?.label || gabungClassKey)
-        : "";
+    (sheetRecord as any).Gabung = joinedGabungWithValue;
     (sheetRecord as any).IsGabung = gabungEnabled ? "true" : "false";
 
     const oldSheetRecord = existingEntry
@@ -4345,7 +4394,7 @@ export function App() {
                     classOrder: classOrderValue,
                     tanggal,
                     tanggalSheet: sheetRecord.Tanggal,
-                    ...(gabungEnabled && gabungClassKey ? { isGabung: true, gabungWith: gabungClassKey } : { isGabung: false, gabungWith: "" }),
+                    ...(joinedGabungWithValue ? { isGabung: true, gabungWith: joinedGabungWithValue } : { isGabung: false, gabungWith: "" }),
                   }
                 : item
             ),
@@ -4366,7 +4415,7 @@ export function App() {
         tanggalSheet: sheetRecord.Tanggal,
         ...nextValues,
         catatan: "",
-        ...(gabungEnabled && gabungClassKey ? { isGabung: true, gabungWith: gabungClassKey } : {}),
+        ...(joinedGabungWithValue ? { isGabung: true, gabungWith: joinedGabungWithValue } : {}),
       };
       return {
         ...prev,
@@ -4824,7 +4873,7 @@ export function App() {
         onClose={() => {
           clearEditing();
           setGabungEnabled(false);
-          setGabungClassKey("");
+          setGabungClassKeys([]);
           setGabungOptions([]);
         }}
         onDraftChange={handleDraftChange}
@@ -4833,9 +4882,9 @@ export function App() {
         onSave={handleSaveSlot}
         gabung={gabungEnabled}
         gabungOptions={gabungOptions}
-        selectedGabung={gabungClassKey}
+        selectedGabung={gabungClassKeys}
         onToggleGabung={(next) => setGabungEnabled(next)}
-        onGabungChange={(next) => setGabungClassKey(next)}
+        onGabungChange={(next) => setGabungClassKeys(next)}
       />
 
       <MapelModal

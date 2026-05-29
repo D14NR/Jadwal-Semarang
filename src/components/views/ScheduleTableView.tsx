@@ -335,9 +335,14 @@ export function ScheduleTableView({
                                       {item.isGabung && item.gabungWith ? (
                                         <span className="ms-1">
                                           {' ('}
-                                          {String(item.gabungWith).includes("||")
-                                            ? String(item.gabungWith).split("||")[1]
-                                            : String(item.gabungWith)}
+                                          {String(item.gabungWith)
+                                            .split(";")
+                                            .map((value) => value.trim())
+                                            .filter(Boolean)
+                                            .map((value, index) =>
+                                              index > 0 ? `, ${value.includes("||") ? value.split("||")[1] : value}` : `${value.includes("||") ? value.split("||")[1] : value}`
+                                            )
+                                            .join("")}
                                           {') '}
                                         </span>
                                       ) : null}
@@ -347,7 +352,12 @@ export function ScheduleTableView({
                                         className="badge bg-info ms-1 text-xxs"
                                         title={
                                           item.gabungWith
-                                            ? `Gabung dengan: ${String(item.gabungWith).includes("||") ? String(item.gabungWith).split("||")[1] : String(item.gabungWith)}`
+                                            ? `Gabung dengan: ${String(item.gabungWith)
+                                                .split(";")
+                                                .map((value) => value.trim())
+                                                .filter(Boolean)
+                                                .map((value) => (value.includes("||") ? value.split("||")[1] : value))
+                                                .join(", ")}`
                                             : "Gabung"
                                         }
                                         style={{ fontSize: "0.65rem", verticalAlign: "middle" }}

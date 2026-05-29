@@ -26,9 +26,9 @@ type EditScheduleModalProps = {
   onSave: () => void;
   gabung?: boolean;
   gabungOptions?: SelectOption[];
-  selectedGabung?: string;
+  selectedGabung?: string[];
   onToggleGabung?: (next: boolean) => void;
-  onGabungChange?: (next: string) => void;
+  onGabungChange?: (next: string[]) => void;
 };
 
 const compactSelectStyles = {
@@ -73,7 +73,7 @@ export function EditScheduleModal({
   onSave,
   gabung = false,
   gabungOptions = [],
-  selectedGabung = "",
+  selectedGabung = [],
   onToggleGabung,
   onGabungChange,
 }: EditScheduleModalProps) {
@@ -159,15 +159,15 @@ export function EditScheduleModal({
             <div className="mt-2">
               <label className="form-label small fw-semibold">Pilih Kelas Gabung (sama cabang)</label>
               <Select
-                value={
-                  selectedGabung
-                    ? gabungOptions.find((opt) => opt.value === selectedGabung) || { value: selectedGabung, label: selectedGabung }
-                    : null
-                }
-                onChange={(opt) => onGabungChange && onGabungChange(opt?.value || "")}
+                value={gabungOptions.filter((opt) => selectedGabung.includes(opt.value))}
+                onChange={(opt) => {
+                  const values = Array.isArray(opt) ? opt.map((item) => item.value) : [];
+                  onGabungChange && onGabungChange(values);
+                }}
                 options={gabungOptions}
                 placeholder="Pilih kelas dari cabang..."
                 isClearable
+                isMulti
                 styles={compactSelectStyles}
               />
             </div>
