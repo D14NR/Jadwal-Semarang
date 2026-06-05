@@ -1740,11 +1740,9 @@ export function App() {
           return;
         }
         const kelasBaseLabel = [kelas, sekolah].filter(Boolean).join(" ");
-        const gabungLabel = (item.isGabung || item.gabungWith) ? String(item.gabungWith || "").trim() : "";
-        const formattedGabungLabel = gabungLabel
-          ? ` (${gabungLabel.replace(/^\(+|\)+$/g, "")})`
-          : "";
-        const kelasLabel = `${kelasBaseLabel}${formattedGabungLabel}`;
+        // Do not include raw gabungWith payload in the sesi text. Gabung classes
+        // are handled and merged in the SuratTugas view so keep the base label only.
+        const kelasLabel = kelasBaseLabel;
         const updateLabel = formatUpdatedLabel(item.updatedAt || item.createdAt);
         const sesiText = `${waktu}/${mapel}-${kelasLabel}/${cabang}${
           updateLabel ? ` ${updateLabel}` : ""

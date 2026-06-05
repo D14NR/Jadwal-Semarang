@@ -65,13 +65,45 @@ export function SuratTugasView({
               ) : (
                 dayRows.flatMap((row) =>
                   row.dates.map((slot, slotIndex) => {
-                    const dateRecords = shouldShowSessions ? recordsByDate.get(slot.date) ?? [] : [];
-                    // collect all sesi entries across columns, order by start time, then
-                    // assign earliest to Sesi 1, next to Sesi 2, etc.
-                    const allValues = dateRecords.flatMap((record) =>
+                    const rawDateRecords = shouldShowSessions ? recordsByDate.get(slot.date) ?? [] : [];
+                    const dateRecords = rawDateRecords.filter((r) => {
+                      const kode = (r["Kode Pengajar"] || r["Kode Pengajar"] || "").toString().trim().toLowerCase();
+                      return !shouldShowSessions || (selectedPengajarKode || "").trim().toLowerCase() === kode;
+                    });
+                    // collect all sesi entries across columns
+                    const rawValues = dateRecords.flatMap((record) =>
                       sesiHeaders.map((h) => (record[h] || "").trim()).filter(Boolean)
                     );
-                    const ordered = allValues
+                    // dedupe by waktu + mapel, but merge kelas labels for gabung classes
+                    const mergedMap = new Map<
+                      string,
+                      { waktu: string; mapel: string; kelasSet: Set<string>; tail?: string }
+                    >();
+                    rawValues.forEach((v) => {
+                      const parts = (v || "").split("/").map((p) => p.trim());
+                      const waktuPart = parts[0] || "";
+                      const second = parts[1] || "";
+                      const dashIndex = second.indexOf("-");
+                      const mapelPart = dashIndex >= 0 ? second.slice(0, dashIndex).trim() : second.trim();
+                      const kelasPart = dashIndex >= 0 ? second.slice(dashIndex + 1).trim() : "";
+                      const tail = parts[2] || "";
+                      const key = `${waktuPart}||${mapelPart}`;
+                      const entry = mergedMap.get(key);
+                      if (!entry) {
+                        const kelasSet = new Set<string>();
+                        if (kelasPart) kelasSet.add(kelasPart);
+                        mergedMap.set(key, { waktu: waktuPart, mapel: mapelPart, kelasSet, tail });
+                      } else {
+                        if (kelasPart) entry.kelasSet.add(kelasPart);
+                      }
+                    });
+                    const deduped = Array.from(mergedMap.values()).map((e) => {
+                      const kelasCombined = Array.from(e.kelasSet).filter(Boolean).join(" . ");
+                      const second = kelasCombined ? `${e.mapel}-${kelasCombined}` : e.mapel;
+                      const combined = `${e.waktu}/${second}/${e.tail || ""}`.trim();
+                      return combined;
+                    });
+                    const ordered = deduped
                       .map((v, i) => {
                         const timeMatch = (v || "").match(/\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2}/);
                         const range = parseRangeFromString(timeMatch ? timeMatch[0] : "");
