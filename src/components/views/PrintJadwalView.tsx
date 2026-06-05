@@ -41,6 +41,20 @@ const getDisplayMapel = (value: string, mapelNameByKode: Record<string, string>)
   return mapelNameByKode[trimmed.toLowerCase()] || trimmed;
 };
 
+const getDisplayMapelKode = (value: string, mapelNameByKode: Record<string, string>) => {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "-";
+  const lower = trimmed.toLowerCase();
+  // If value already matches a kode present in mapelNameByKode, return original trimmed value
+  if (mapelNameByKode[lower]) return trimmed;
+  // Otherwise try to find kode by name
+  for (const [kode, nama] of Object.entries(mapelNameByKode)) {
+    if ((nama || "").trim().toLowerCase() === lower) return kode;
+  }
+  // Fallback to trimmed
+  return trimmed;
+};
+
 const getClassLabelHtml = (kelas: string, sekolah?: string) => {
   const safeKelas = escapeHtml(kelas || "-");
   const safeSekolah = escapeHtml((sekolah || "").trim());
@@ -105,7 +119,7 @@ const getCellHtml = (entries: RecordItem[], mapelNameByKode: Record<string, stri
   return entries
     .map(
       (entry, index) =>
-        `<div class="session-item"><div class="session-mapel">${getDisplayMapel(
+        `<div class="session-item"><div class="session-mapel">${getDisplayMapelKode(
           entry.mapel || `Sesi ${index + 1}`,
           mapelNameByKode
         )}</div><div class="session-pengajar">${entry.pengajar || "-"}</div><div class="session-waktu">${
@@ -120,34 +134,38 @@ const getRegularTableHtml = (
   groups: ScheduleGroup[],
   mapelNameByKode: Record<string, string>
 ) => {
-  const dayHeader = dayColumns
-    .map((day) => `<th colspan="3">${escapeHtml(day.label)}</th>`)
-    .join("");
-
-  const dayColGroup = dayColumns
-    .map(() => '<col class="date-col" /><col class="mapel-col" /><col class="time-col" />')
-    .join("");
+  const palette = ["#fde9f5", "#eef6ff", "#fff7e6", "#fffbea", "#f0fdf4", "#f7f6ff"];
+  const dayHeader = dayColumns.map((day) => `<th colspan="3">${escapeHtml(day.label)}</th>`).join("");
+  const dayColGroup = dayColumns.map(() => '<col class="date-col" /><col class="mapel-col" /><col class="time-col" />').join("");
 
   const bodyRows = groups
     .map((group) => {
       const rowCount = Math.max(...dayColumns.map((day) => day.dates.length), 1);
       const rows = Array.from({ length: rowCount }, (_, rowIndex) => {
-        const classCell =
-          rowIndex === 0
-            ? `<td class="kelas-cell" rowspan="${rowCount}">${getClassLabelHtml(group.kelas, group.sekolah)}</td>`
-            : "";
+        const classCell = rowIndex === 0 ? `<td class="kelas-cell" rowspan="${rowCount}">${getClassLabelHtml(group.kelas, group.sekolah)}</td>` : "";
 
         const dayCells = dayColumns
-          .map((day) => {
+          .map((day, dayIndex) => {
             const slot = day.dates[rowIndex];
             if (!slot) {
               return "<td></td><td></td><td></td>";
             }
             const entries = (group.entriesByDate[slot.date] ?? []).filter(hasScheduleContent);
-            return [
-              `<td class="date-col">${escapeHtml(slot.label)}</td>`,
-              `<td class="mapel-col">${toCellLines(entries, "mapel", mapelNameByKode) || ""}</td>`,
-              `<td class="time-col">${toCellLines(entries, "waktu", mapelNameByKode) || ""}</td>`,
+            const bg = palette[dayIndex % palette.length];
+            const mapelHtml = entries
+              .map((entry, idx) => `
+                <div class="session-item" style="background:${bg};padding:4px;border-radius:6px;margin-bottom:4px;">
+                  <div class="session-mapel" style="font-weight:700;color:#0b3b99;">${escapeHtml(getDisplayMapelKode(entry.mapel || `Sesi ${idx + 1}`, mapelNameByKode))}</div>
+                  <div class="session-pengajar">${escapeHtml(entry.pengajar || "-")}</div>
+                </div>`)
+              .join("");
+
+            const timeHtml = entries.map((entry) => escapeHtml(entry.waktu || "-")).join("<br/>");
+
+            return [`
+              <td class="date-col">${escapeHtml(slot.label)}</td>`,
+              `<td class="mapel-col">${mapelHtml}</td>`,
+              `<td class="time-col">${timeHtml}</td>`,
             ].join("");
           })
           .join("");
@@ -662,8 +680,8 @@ export function PrintJadwalView({
                 HARI & MATA PELAJARAN
               </th>
             </tr>
-            <tr>
-              {regularDayColumns.map((day) => (
+              <tr>
+              {regularDayColumns.map((day, dayIndex) => (
                 <th key={day.label} colSpan={3} className="text-center">
                   {day.label}
                 </th>
@@ -689,7 +707,7 @@ export function PrintJadwalView({
                           {group.sekolah ? <div className="text-muted">{group.sekolah}</div> : null}
                         </td>
                       )}
-                      {regularDayColumns.map((day) => {
+                      {regularDayColumns.map((day, dayIndex) => {
                         const slot = day.dates[rowIndex];
                         if (!slot) {
                           return (
@@ -708,10 +726,11 @@ export function PrintJadwalView({
                             </td>
                              <td key={`${rowKey}-${slot.date}-mapel`} className="print-mapel-col">
                               {entries.map((entry, idx) => (
-                                 <div key={`${entry.id}-${idx}`} className="session-item">
-                                  <span className="name-chip" style={getTagStyle(getDisplayMapel(entry.mapel || "", mapelNameByKode), "mapel")}>
-                                    {getDisplayMapel(entry.mapel || "", mapelNameByKode)}
-                                  </span>
+                                 <div key={`${entry.id}-${idx}`} className="session-item" style={{background: ["#fde9f5", "#eef6ff", "#fff7e6", "#fffbea", "#f0fdf4", "#f7f6ff"][dayIndex % 6], padding: 6, borderRadius: 6, marginBottom: 6}}>
+                                  <div className="session-mapel" style={getTagStyle(getDisplayMapelKode(entry.mapel || "", mapelNameByKode), "mapel")}>
+                                    {getDisplayMapelKode(entry.mapel || "", mapelNameByKode)}
+                                  </div>
+                                  <div className="session-pengajar">{entry.pengajar || "-"}</div>
                                 </div>
                               ))}
                             </td>
@@ -751,14 +770,13 @@ export function PrintJadwalView({
               {tambahanVisibleDates.map((slot) => {
                 const entries = (selectedClassGroup.entriesByDate[slot.date] ?? []).filter(hasScheduleContent);
                 return (
-                  <td key={`tambahan-${slot.date}`}>
+                    <td key={`tambahan-${slot.date}`}>
                     {entries.map((entry, idx) => (
-                      <div key={`${entry.id}-${idx}`}>
-                        <span className="name-chip" style={getTagStyle(getDisplayMapel(entry.mapel || "", mapelNameByKode), "mapel")}>
-                          {getDisplayMapel(entry.mapel || "", mapelNameByKode)}
-                        </span>
-                        <br />
-                        {entry.waktu || "-"}
+                      <div key={`${entry.id}-${idx}`} className="session-item">
+                        <div className="session-mapel" style={getTagStyle(getDisplayMapelKode(entry.mapel || "", mapelNameByKode), "mapel")}>
+                          {getDisplayMapelKode(entry.mapel || "", mapelNameByKode)}
+                        </div>
+                        <div className="session-waktu">{entry.waktu || "-"}</div>
                       </div>
                     ))}
                   </td>

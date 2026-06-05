@@ -19,6 +19,7 @@ type ScheduleTableViewProps = {
   onMoveClass: (group: ScheduleGroup, direction: -1 | 1) => void;
   onSelectSlot: (group: ScheduleGroup, slot: ScheduleSlotDate, item?: RecordItem) => void;
   onOpenClassModal: () => void;
+  mapelRecords?: Record<string, string>[];
 };
 
 export function ScheduleTableView({
@@ -36,6 +37,7 @@ export function ScheduleTableView({
   onMoveClass,
   onSelectSlot,
   onOpenClassModal,
+  mapelRecords,
 }: ScheduleTableViewProps) {
   const [editingClassKey, setEditingClassKey] = useState<string | null>(null);
   const [kelasDraft, setKelasDraft] = useState("");
@@ -59,6 +61,18 @@ export function ScheduleTableView({
     if (success) {
       cancelClassEdit();
     }
+  };
+
+  const getMapelKode = (rawValue: string) => {
+    const raw = String(rawValue || "").trim();
+    if (!raw) return "";
+    if (!mapelRecords || mapelRecords.length === 0) return raw;
+    const norm = raw.toLowerCase();
+    const byKode = mapelRecords.find((r) => (((r["Kode_Mapel"] || r["Singkatan"] || "") + "").trim().toLowerCase() === norm));
+    if (byKode) return ((byKode["Kode_Mapel"] || byKode["Singkatan"] || "") + "").trim();
+    const byName = mapelRecords.find((r) => (((r["Mapel"] || r["Mata Pelajaran"] || "") + "").trim().toLowerCase() === norm));
+    if (byName) return ((byName["Kode_Mapel"] || byName["Singkatan"] || "") + "").trim();
+    return raw;
   };
 
   const hasVisibleConflict = monthScheduleGroups.some((group) =>
@@ -312,6 +326,8 @@ export function ScheduleTableView({
                           <div className="d-flex flex-column gap-1">
                             {entries.map((item, itemIndex) => {
                               const isEditingEntry = editingSlot?.entryId === item.id;
+                              const rawMapel = item.mapel || `Sesi ${itemIndex + 1}`;
+                              const displayKode = getMapelKode(rawMapel) || rawMapel;
                               return (
                                 <button
                                   key={item.id}
@@ -329,41 +345,29 @@ export function ScheduleTableView({
                                    }}
                                    disabled={readOnly}
                                 >
-                                  <div className="fw-semibold text-xxs">
-                                    <span className="name-chip" style={getTagStyle(item.mapel || `Sesi ${itemIndex + 1}`, "mapel")}>
-                                      {item.mapel || `Sesi ${itemIndex + 1}`}
-                                      {item.isGabung && item.gabungWith ? (
-                                        <span className="ms-1">
-                                          {' ('}
-                                          {String(item.gabungWith)
-                                            .split(";")
-                                            .map((value) => value.trim())
-                                            .filter(Boolean)
-                                            .map((value, index) =>
-                                              index > 0 ? `, ${value.includes("||") ? value.split("||")[1] : value}` : `${value.includes("||") ? value.split("||")[1] : value}`
-                                            )
-                                            .join("")}
-                                          {') '}
-                                        </span>
-                                      ) : null}
+                                    <div className="fw-semibold text-xxs">
+                                    <span className="name-chip" style={getTagStyle(displayKode, "mapel")}>
+                                      {displayKode}
+                                      {item.isGabung ? " (Gabung)" : null}
                                     </span>
-                                    {item.isGabung ? (
-                                      <span
-                                        className="badge bg-info ms-1 text-xxs"
-                                        title={
-                                          item.gabungWith
-                                            ? `Gabung dengan: ${String(item.gabungWith)
-                                                .split(";")
-                                                .map((value) => value.trim())
-                                                .filter(Boolean)
-                                                .map((value) => (value.includes("||") ? value.split("||")[1] : value))
-                                                .join(", ")}`
-                                            : "Gabung"
-                                        }
-                                        style={{ fontSize: "0.65rem", verticalAlign: "middle" }}
-                                      >
-                                        Gabung
-                                      </span>
+                                    {item.isGabung && item.gabungWith ? (
+                                      <div className="schedule-class-sub text-xxs">
+                                        {String(item.gabungWith)
+                                          .split(";")
+                                          .map((value) => value.trim())
+                                          .filter(Boolean)
+                                          .map((value) => {
+                                            const parts = value.split("||").map((p) => String(p || "").trim()).filter(Boolean);
+                                            if (parts.length >= 3) {
+                                              return `${parts[1]} ${parts[2]}`;
+                                            }
+                                            if (parts.length === 2) {
+                                              return parts[1];
+                                            }
+                                            return value;
+                                          })
+                                          .join(" . ")}
+                                      </div>
                                     ) : null}
                                   </div>
                                   <div className="text-xxs mt-1">

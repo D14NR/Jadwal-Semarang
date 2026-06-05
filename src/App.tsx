@@ -4739,6 +4739,7 @@ export function App() {
                     onDeleteClass={handleDeleteClass}
                     onMoveClass={handleMoveClass}
                     onSelectSlot={handleSelectBulanIniSlot}
+                    mapelRecords={mapelRecords}
                     onOpenClassModal={handleOpenClassModal}
                   />
                 ) : activeKey === "monitoringKelas" ? (
