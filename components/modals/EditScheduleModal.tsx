@@ -71,6 +71,11 @@ export function EditScheduleModal({
     return null;
   }
 
+  const todayStr = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  })();
+
   // Local checkbox component to ensure immediate UI feedback and stop propagation
   function GabungCheckbox({
     checked,
@@ -224,8 +229,19 @@ export function EditScheduleModal({
             </div>
           )}
         </div>
+        <div className="mt-2">
+          {editingSlot.tanggal === todayStr ? (
+            <div className="text-muted small">Menghapus atau mengubah jadwal pada hari ini tidak diperbolehkan.</div>
+          ) : null}
+        </div>
         <div className="mt-4 d-flex justify-content-end gap-2">
-          <button type="button" className="btn btn-outline-danger btn-sm" onClick={onDelete}>
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm"
+            onClick={onDelete}
+            disabled={editingSlot.tanggal === todayStr}
+            title={editingSlot.tanggal === todayStr ? "Menghapus jadwal hari ini tidak diperbolehkan" : undefined}
+          >
             {editingSlot.entryId ? "Hapus" : "Batal"}
           </button>
           <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>

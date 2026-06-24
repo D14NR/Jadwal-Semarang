@@ -42,6 +42,10 @@ export function ScheduleTableView({
   const [editingClassKey, setEditingClassKey] = useState<string | null>(null);
   const [kelasDraft, setKelasDraft] = useState("");
   const [sekolahDraft, setSekolahDraft] = useState("");
+  const todayStr = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  })();
 
   const startClassEdit = (group: ScheduleGroup) => {
     const key = `${group.cabang}||${group.kelas}||${group.sekolah || ""}`;
@@ -206,6 +210,14 @@ export function ScheduleTableView({
                             borderRadius: "5px"
                           }}
                           aria-label="Hapus kelas"
+                          disabled={
+                            saving || (group.entriesByDate?.[todayStr] ?? []).length > 0
+                          }
+                          title={
+                            saving || (group.entriesByDate?.[todayStr] ?? []).length > 0
+                              ? "Tidak dapat menghapus kelas pada hari ini"
+                              : undefined
+                          }
                         >
                           <i className="bi bi-trash" style={{ fontSize: "14px" }} />
                         </button>
@@ -311,9 +323,14 @@ export function ScheduleTableView({
                           key={slot.date}
                           onClick={() => {
                             if (!readOnly) {
-                              onSelectSlot(group, slot);
+                              if (slot.date === todayStr) {
+                                window.alert("Tidak diperbolehkan menambah atau mengubah jadwal pada hari ini.");
+                              } else {
+                                onSelectSlot(group, slot);
+                              }
                             }
                           }}
+                          title={slot.date === todayStr ? "Tidak dapat menambah/mengubah jadwal hari ini" : undefined}
                           className={`schedule-cell ${
                             activeDayStartIndexes.has(index) && index !== 0 ? "day-divider" : ""
                           } ${isEditingCell && !editingSlot?.entryId ? "is-editing" : ""} ${
@@ -340,10 +357,15 @@ export function ScheduleTableView({
                                    onClick={(event) => {
                                      event.stopPropagation();
                                      if (!readOnly) {
-                                       onSelectSlot(group, slot, item);
+                                       if (slot.date === todayStr) {
+                                         window.alert("Tidak diperbolehkan menambah atau mengubah jadwal pada hari ini.");
+                                       } else {
+                                         onSelectSlot(group, slot, item);
+                                       }
                                      }
                                    }}
-                                   disabled={readOnly}
+                                   disabled={readOnly || slot.date === todayStr}
+                                   title={slot.date === todayStr ? "Tidak dapat mengubah/hapus jadwal hari ini" : undefined}
                                 >
                                     <div className="fw-semibold text-xxs">
                                     <span className="name-chip" style={getTagStyle(displayKode, "mapel")}>
