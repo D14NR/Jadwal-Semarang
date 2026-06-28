@@ -122,9 +122,7 @@ const getCellHtml = (entries: RecordItem[], mapelNameByKode: Record<string, stri
         `<div class="session-item"><div class="session-mapel">${getDisplayMapelKode(
           entry.mapel || `Sesi ${index + 1}`,
           mapelNameByKode
-        )}</div><div class="session-pengajar">${entry.pengajar || "-"}</div><div class="session-waktu">${
-          entry.waktu || "-"
-        }</div></div>`
+        )}</div><div class="session-waktu">${entry.waktu || "-"}</div></div>`
     )
     .join("<hr/>");
 };
@@ -156,11 +154,15 @@ const getRegularTableHtml = (
               .map((entry, idx) => `
                 <div class="session-item" style="background:${bg};padding:4px;border-radius:6px;margin-bottom:4px;">
                   <div class="session-mapel" style="font-weight:700;color:#0b3b99;">${escapeHtml(getDisplayMapelKode(entry.mapel || `Sesi ${idx + 1}`, mapelNameByKode))}</div>
-                  <div class="session-pengajar">${escapeHtml(entry.pengajar || "-")}</div>
                 </div>`)
               .join("");
 
-            const timeHtml = entries.map((entry) => escapeHtml(entry.waktu || "-")).join("<br/>");
+            const timeHtml = entries
+              .map((entry) => `
+                <div class="session-item" style="padding:4px;border-radius:6px;margin-bottom:4px;">
+                  <div class="session-waktu">${escapeHtml(entry.waktu || "-")}</div>
+                </div>`)
+              .join("");
 
             return [`
               <td class="date-col">${escapeHtml(slot.label)}</td>`,
@@ -262,11 +264,11 @@ const printHtmlDocument = (
   }).join("");
 
   const isPortrait = orientation === "portrait";
-  const kelasWidth = isPortrait ? 44 : 52;
-  const dateWidth = isPortrait ? 46 : 52;
-  const mapelWidth = isPortrait ? 56 : 70;
-  const timeWidth = isPortrait ? 40 : 46;
-  const tambahanDayWidth = isPortrait ? 64 : 80;
+  const kelasWidth = isPortrait ? 48 : 56;
+  const dateWidth = isPortrait ? 50 : 58;
+  const mapelWidth = isPortrait ? 62 : 78;
+  const timeWidth = isPortrait ? 44 : 50;
+  const tambahanDayWidth = isPortrait ? 70 : 86;
 
   const html = `
     <!doctype html>
@@ -309,7 +311,7 @@ const printHtmlDocument = (
           .muted { color: #64748b; }
           table {
             border-collapse: separate;
-            border-spacing: 0;
+            border-spacing: 1px;
             width: 100%;
             margin-top: 3px;
             border: 1px solid #94a3b8;
@@ -319,7 +321,7 @@ const printHtmlDocument = (
           th, td {
             border-right: 1px solid #c8d1df;
             border-bottom: 1px solid #c8d1df;
-            padding: 2px 3px;
+            padding: 3px 4px;
             vertical-align: top;
           }
           th:last-child, td:last-child { border-right: 0; }
@@ -730,13 +732,18 @@ export function PrintJadwalView({
                                   <div className="session-mapel" style={getTagStyle(getDisplayMapelKode(entry.mapel || "", mapelNameByKode), "mapel")}>
                                     {getDisplayMapelKode(entry.mapel || "", mapelNameByKode)}
                                   </div>
-                                  <div className="session-pengajar">{entry.pengajar || "-"}</div>
                                 </div>
                               ))}
                             </td>
                             <td key={`${rowKey}-${slot.date}-waktu`} className="text-nowrap print-time-col">
                               {entries.map((entry, idx) => (
-                                <div key={`${entry.id}-${idx}`}>{entry.waktu || "-"}</div>
+                                <div
+                                  key={`${entry.id}-${idx}`}
+                                  className="session-item"
+                                  style={{ marginBottom: 6, padding: "0.3rem 0.35rem", borderRadius: 6 }}
+                                >
+                                  {entry.waktu || "-"}
+                                </div>
                               ))}
                             </td>
                           </Fragment>

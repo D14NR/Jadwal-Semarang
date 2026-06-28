@@ -800,7 +800,7 @@ body {
 
 .print-preview-table th,
 .print-preview-table td {
-  padding: 0.24rem 0.3rem;
+  padding: 0.28rem 0.38rem;
   vertical-align: top;
 }
 
@@ -819,53 +819,58 @@ body {
 }
 
 .print-preview-table .print-kelas-col {
-  width: 72px;
-  min-width: 72px;
+  width: 82px;
+  min-width: 82px;
   text-align: center;
   vertical-align: middle;
 }
 
 .print-preview-table .print-date-col {
-  width: 68px;
-  min-width: 68px;
+  width: 78px;
+  min-width: 78px;
 }
 
 .print-preview-table .print-mapel-col {
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
   white-space: normal;
   word-break: break-word;
 }
 
 .print-preview-table .print-time-col {
-  width: 60px;
-  min-width: 60px;
+  width: 70px;
+  min-width: 70px;
 }
 
 .print-preview-portrait .print-preview-table .print-kelas-col {
+  width: 74px;
+  min-width: 74px;
+}
+
+.print-preview-portrait .print-preview-table .print-date-col {
+  width: 68px;
+  min-width: 68px;
+}
+
+.print-preview-portrait .print-preview-table .print-mapel-col {
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+}
+
+.print-preview-portrait .print-preview-table .print-time-col {
   width: 64px;
   min-width: 64px;
 }
 
-.print-preview-portrait .print-preview-table .print-date-col {
-  width: 56px;
-  min-width: 56px;
-}
-
-.print-preview-portrait .print-preview-table .print-mapel-col {
-  width: 60px;
-  min-width: 60px;
-  max-width: 60px;
-}
-
-.print-preview-portrait .print-preview-table .print-time-col {
-  width: 54px;
-  min-width: 54px;
-}
-
 .print-preview-table .class-group-start td {
   border-top: 2px solid #64748b;
+}
+
+.print-preview-table .session-item {
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.45rem;
 }
 
 .print-preview-table .session-item + .session-item {
