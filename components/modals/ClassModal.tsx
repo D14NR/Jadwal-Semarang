@@ -71,7 +71,7 @@ export function ClassModal({
               <input
                 value={classDraft.sekolah}
                 onChange={(event) => onDraftChange("sekolah", event.target.value)}
-                placeholder="Pastikan nama sekolah sesuai dengan LPS"
+                placeholder="SMA N1 Semarang"
                 className="form-control form-control-sm"
               />
             </>

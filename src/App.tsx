@@ -177,6 +177,7 @@ export function App() {
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [classDraft, setClassDraft] = useState({ cabang: "", kelas: "", sekolah: "" });
   const [classError, setClassError] = useState("");
+  const [groupDisplayOrder, setGroupDisplayOrder] = useState<Record<string, number>>({});
   const [conflictError, setConflictError] = useState("");
   const [isMapelModalOpen, setIsMapelModalOpen] = useState(false);
   const [mapelDraft, setMapelDraft] = useState({ Mapel: "", Kode_Mapel: "" });
@@ -334,7 +335,14 @@ export function App() {
   const buildClassGroupKey = (cabang: string, kelas: string, sekolah = "") =>
     `${normalizeText(cabang)}||${normalizeText(kelas)}||${normalizeText(sekolah)}`;
   const parseClassOrder = (value: unknown) => {
-    const numeric = Number(String(value ?? "").trim());
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const trimmed = String(value).trim();
+    if (!trimmed) {
+      return null;
+    }
+    const numeric = Number(trimmed);
     return Number.isFinite(numeric) ? numeric : null;
   };
   const titleCase = (value: string) =>
@@ -1040,6 +1048,7 @@ export function App() {
     cabangFilter: string,
     searchText: string
   ) => {
+    const getGroupOrderKey = (groupKey: string) => `${activeScheduleKey}:${selectedMonthKey}:${selectedScheduleCabang}:${groupKey}`;
     const entries = cabangFilter
       ? sourceRecords.filter(
           (entry) => normalizeText(entry.cabang || "") === normalizeText(cabangFilter)
@@ -1052,19 +1061,21 @@ export function App() {
     let fallbackOrder = 1;
 
     entries.forEach((entry) => {
-      const cabang = entry.cabang || "-";
-      const kelas = entry.kelas || "-";
+      const cabang = entry.cabang || "";
+      const kelas = entry.kelas || "";
       const sekolah = entry.sekolah || "";
       const key = buildClassGroupKey(cabang, kelas, sekolah);
       const parsedOrder = parseClassOrder(entry.classOrder);
-      const initialOrder = parsedOrder ?? fallbackOrder;
+      const overrideOrder = groupDisplayOrder[getGroupOrderKey(key)];
+      const initialOrder = overrideOrder ?? (parsedOrder ?? fallbackOrder);
 
       if (!grouped.has(key)) {
         grouped.set(key, { cabang, kelas, sekolah, classOrder: initialOrder, entriesByDate: {} });
         fallbackOrder += 1;
-      } else if (parsedOrder !== null) {
-        const currentOrder = grouped.get(key)?.classOrder ?? parsedOrder;
-        grouped.get(key)!.classOrder = Math.min(currentOrder, parsedOrder);
+      } else {
+        const currentOrder = grouped.get(key)?.classOrder ?? initialOrder;
+        const nextOrder = overrideOrder ?? (parsedOrder !== null ? Math.min(currentOrder, parsedOrder) : currentOrder);
+        grouped.get(key)!.classOrder = nextOrder;
       }
 
       if (!hasScheduleContent(entry)) {
@@ -3801,6 +3812,14 @@ export function App() {
 
     const currentKey = buildClassGroupKey(currentGroup.cabang, currentGroup.kelas, currentGroup.sekolah || "");
     const targetKey = buildClassGroupKey(targetGroup.cabang, targetGroup.kelas, targetGroup.sekolah || "");
+    const currentViewKey = `${activeScheduleKey}:${selectedMonthKey}:${selectedScheduleCabang}:${currentKey}`;
+    const targetViewKey = `${activeScheduleKey}:${selectedMonthKey}:${selectedScheduleCabang}:${targetKey}`;
+
+    setGroupDisplayOrder((prev) => ({
+      ...prev,
+      [currentViewKey]: nextIndex,
+      [targetViewKey]: currentIndex,
+    }));
 
     setRecords((prev) => ({
       ...prev,
